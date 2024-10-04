@@ -1,2 +1,4 @@
-(define (put table op type proc) (hash-table/put! table (list op type) proc))
-(define (get table op type) (hash-table/get table (list op type) false))
+(define (put op type proc)
+  (hash-table/put! *op-table* (list op type) proc))
+(define (get op type)
+  (hash-table/get *op-table* (list op type) false))
