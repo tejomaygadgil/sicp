@@ -1,0 +1,22 @@
+;; Avoid naming conflict
+(define scheme-sin sin)
+(define scheme-cos cos)
+(define scheme-atan atan)
+(define (install-symbolic-trigonometry-package)
+  ;; Install
+  (put 'sqrt '(real-number) (lambda (x) (expt x 0.5)))
+  (put 'sin '(real-number) scheme-sin)
+  (put 'cos '(real-number) scheme-cos)
+  (put 'atan '(real-number real-number) scheme-atan)
+  'done)
+;; Interface
+(define (square x)
+  (mul x x))
+(define (sqrt x)
+  (apply-generic 'sqrt x))
+(define (sin x)
+  (apply-generic 'sin x))
+(define (cos x)
+  (apply-generic 'cos x))
+(define (atan x y)
+  (apply-generic 'atan x y))

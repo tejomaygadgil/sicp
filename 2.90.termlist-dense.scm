@@ -1,0 +1,43 @@
+(define (install-termlist-dense-package)
+  (include "2.term.scm")
+  ;; Sel
+  (define (degree term-list)
+    (- (length term-list) 1))
+  (define (first-term term-list)
+    (make-term (degree term-list)
+               (car term-list)))
+  (define (rest-terms term-list)
+    (let ((rest (cdr term-list)))
+      (cond ((empty-termlist? rest) rest)
+            ((=zero? (car rest)) (rest-terms rest))
+            (else rest))))
+  ;; Pred
+  (define (empty-termlist? term-list) (null? term-list))
+  ;; Proc
+  (define (adjoin-term term term-list)
+    (if (=zero? (coeff term)) term-list
+      (let ((term-order (order term))
+            (term-list-degree (degree term-list)))
+        (if (> term-order term-list-degree)
+          (let iter ((pad (- term-order term-list-degree 1))
+                     (acc term-list))
+            (if (zero? pad)
+              (cons (coeff term) acc)
+              (iter (- pad 1) (cons 0 acc))))
+          (error "order not greater than degree -- ADJOIN-TERM" term-order term-list-degree)))))
+  (define (negate-terms term-list)
+    (map (lambda (coeff) (negate coeff))
+         term-list))
+  ;; Install
+  (define (tag p) (attach-tag 'dense p))
+  (put 'first-term '(dense) first-term)
+  (put 'rest-terms '(dense)
+       (lambda (x) (tag (rest-terms x))))
+  (put 'empty-termlist? '(dense) empty-termlist?)
+  (put 'adjoin-term 'dense
+       (lambda (term term-list) (tag (adjoin-term term term-list))))
+  (put 'negate-terms '(dense)
+       (lambda (term-list) (tag (negate-terms term-list))))
+  (put 'make 'dense
+       (lambda (x) (tag x)))
+  'done)

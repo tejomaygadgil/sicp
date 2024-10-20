@@ -1,0 +1,57 @@
+;;;; 2.86
+;; Suppose we want to handle complex numbers whose real parts, imaginary parts, magnitudes, and angles can be either ordinary numbers, rational numbers, or other numbers we might wish to add to the system. Describe and implement the changes to the system needed to accommodate this. You will have to define operations such as sine and cosine that are generic over ordinary numbers and rational numbers.
+
+;; Test
+(load "0.util.scm")
+(load "0.efma.scm")
+(load "0.table.scm")
+(load "2.85.symbolic-tagged-data.scm")
+(load "2.symbolic-interface.scm")
+(define *op-table* (make-hash-table))
+(load "2.symbolic-scheme-number.scm")
+(load "2.symbolic-rational.scm")
+(load "2.symbolic-real-number.scm")
+(install-symbolic-scheme-number-package)
+(install-symbolic-rational-package)
+(install-symbolic-real-number-package)
+(load "2.80.symbolic-=zero?.scm")
+(load "2.83.symbolic-raise.scm")
+(load "2.85.symbolic-project.scm")
+(load "2.85.symbolic-no-drop.scm")
+(install-symbolic-=zero?-package)
+(install-symbolic-raise-package)
+(install-symbolic-project-package)
+(install-symbolic-no-drop-package)
+;; Install package
+(load "2.86.apply-generic.scm") ; Raise unary operations and same-typed binary operations
+(load "2.86.symbolic-complex.scm") ; Replace Scheme arithmetic with symbolic operators
+(load "2.86.complex-rectangular.scm") ; (*)
+(load "2.86.complex-polar.scm") ; (*)
+(install-complex-rectangular-package)
+(install-complex-polar-package)
+(load "2.86.symbolic-project.scm") ; Relax complex number projection (do not coerce to real number)
+(load "2.86.symbolic-trigonometry.scm") ; Install generic trigonometric operators
+(load "2.86.symbolic-equ?.scm") ; Make equ? recursive
+(install-symbolic-complex-package)
+(install-symbolic-project-package)
+(install-symbolic-trigonometry-package)
+(install-symbolic-equ?-package)
+;; Test
+(define (print-complex-ops x y)
+  (let ((real-imag (make-complex-from-real-imag x y))
+        (mag-ang (make-complex-from-mag-ang x y)))
+    (print "=======")
+    (display "real-imag: ") (print real-imag)
+    (display "add: ") (print (add real-imag real-imag))
+    (display "sub: ") (print (sub real-imag real-imag))
+    (display "mul: ") (print (mul real-imag real-imag))
+    (display "div: ") (print (div real-imag real-imag))
+    (print "--------")
+    (display "mag-ang: ") (print mag-ang)
+    (display "add: ") (print (add mag-ang mag-ang))
+    (display "sub: ") (print (sub mag-ang mag-ang))
+    (display "mul: ") (print (mul mag-ang mag-ang))
+    (display "div: ") (print (div mag-ang mag-ang))))
+(define numbers (list 1 2 (make-rational 1 7) (make-rational 6 7) 2. 3.) )
+(map (lambda (x) (print-complex-ops (car x) (cadr x)))
+     (combinations numbers 2))
