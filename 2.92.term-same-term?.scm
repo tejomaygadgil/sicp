@@ -1,0 +1,5 @@
+(define (same-term? t1 t2)
+  (and (= (order t1)
+          (order t2))
+       (equ? (coeff t1)
+             (coeff t2))))

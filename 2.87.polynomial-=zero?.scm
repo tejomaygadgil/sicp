@@ -1,0 +1,6 @@
+(define (install-polynomial-=zero?-package)
+  (include "2.termlist-sparse.scm")
+  (include "2.polynomial-abstraction.scm")
+  (put '=zero? '(polynomial)
+       (lambda (x) (empty-termlist? (term-list x))))
+  'done)

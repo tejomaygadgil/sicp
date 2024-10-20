@@ -1,0 +1,10 @@
+(define (same-termlist? tl1 tl2)
+  (cond ((and (empty-termlist? tl1)
+              (empty-termlist? tl2)) true)
+        ((or (empty-termlist? tl1)
+             (empty-termlist? tl2)) false)
+        (else
+          (and (same-term? (first-term tl1)
+                           (first-term tl2))
+               (same-termlist? (rest-terms tl1)
+                               (rest-terms tl2))))))

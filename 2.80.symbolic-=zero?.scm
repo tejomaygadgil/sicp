@@ -1,0 +1,18 @@
+(define (install-symbolic-=zero?-package)
+  ;; Install
+  (put '=zero? '(scheme-number)
+       (lambda (x) (equal? x 0)))
+  (put '=zero? '(rational)
+       (lambda (x)
+         (include "2.rational.scm")
+         (equal? (numer x) 0)))
+  (put '=zero? '(real-number) zero?)
+  (put '=zero? '(complex)
+       (lambda (x)
+         (include "2.complex-abstraction.scm")
+         (and (equal? (real-part x) 0)
+              (equal? (imag-part x) 0))))
+  'done)
+;; Interface
+(define (=zero? x)
+  (apply-generic '=zero? x))

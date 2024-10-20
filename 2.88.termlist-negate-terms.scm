@@ -1,0 +1,5 @@
+(define (negate-terms term-list)
+  (map (lambda (term)
+         (make-term (order term)
+                    (negate (coeff term))))
+       term-list))
