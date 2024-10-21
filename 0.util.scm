@@ -17,6 +17,14 @@
       (print 'pass)
       (error 'ne: x y)))
 
+(define (within-delta? actual guess delta)
+  (< (abs (- guess actual))
+     delta))
+
+(define (random-in-range low high)
+  (let ((range (- high low)))
+    (+ low (random range))))
+
 (define (elapsed func)
   (let ((current-time (runtime)))
     (func)
