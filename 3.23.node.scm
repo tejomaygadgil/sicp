@@ -1,0 +1,41 @@
+(define (make-node value)
+  (let ((node (cons '()
+                    (cons value
+                          '()))))
+    ;; Sel
+    (define (prev) (car node))
+    (define (value) (cadr node))
+    (define (next) (cddr node))
+    ;; Mut
+    (define (set-prev! value)
+      (set-car! node value)
+      'ok)
+    (define (set-next! value)
+      (set-cdr! (cdr node) value)
+      'ok)
+    (define (dispatch m)
+      (cond ((eq? m 'prev) (prev))
+            ((eq? m 'value) (value))
+            ((eq? m 'next) (next))
+            ((eq? m 'set-prev!) set-prev!)
+            ((eq? m 'set-next!) set-next!)
+            (else (error "Unknown request -- MAKE-NODE" m))))
+    dispatch))
+;; Inteface
+;; Sel
+(define (prev node)
+  (node 'prev))
+(define (value node)
+  (node 'value))
+(define (next node)
+  (node 'next))
+;; Mut
+(define (set-prev! node value)
+  ((node 'set-prev!) value))
+(define (set-next! node value)
+  ((node 'set-next!) value))
+;; Op
+(define (link-nodes! node1 node2)
+  (set-next! node1 node2)
+  (set-prev! node2 node1)
+  'ok)
