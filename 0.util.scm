@@ -30,12 +30,11 @@
     (func)
     (/ (round (* (- (runtime) current-time) 100)) 100)))
 
-(define (repeat func n)
-  (if (> n 0)
-    (begin
-      (print (func))
-      (newline)
-      (repeat func (- n 1)))))
+(define (repeat func trials)
+  (if (> trials 0)
+    (let ((return-value (func)))
+      (print return-value)
+      (repeat func (- trials 1)))))
 
 (define (wait t)
   (define (get-current-time)
