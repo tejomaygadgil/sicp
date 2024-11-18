@@ -44,3 +44,13 @@
       (if (> t (* (- (get-current-time) start-time)))
         (loop)))
     (loop)))
+
+(define (until stream condition then-what timeout)
+  (let loop ((stream stream)
+             (time-left timeout))
+    (if (zero? time-left) 'timeout
+    (let ((result (stream-car stream)))
+      (if (or (null? stream)
+              (condition result)) (then-what stream)
+        (loop (stream-cdr stream)
+              (- time-left 1)))))))

@@ -1,0 +1,31 @@
+(load "0.util.scm")
+(load "3.streams.scm")
+(load "3.stream.pairs.scm")
+
+;; Test
+(define (wait-for coord)
+  (display coord) (display "\t")
+  (lambda (result) (and (= (car result) (car coord))
+                        (= (cadr result) (cadr coord)))))
+(define (reset-counter stream) (counter 'pop))
+(define counter
+  (let ((count -1))
+    (define (dispatch m)
+      (cond ((eq? m '1+)
+             (set! count (1+ count)))
+            ((eq? m 'pop)
+               (display count) (newline)
+               (set! count -1))
+            (else "Invaid message -- COUNTER")))
+    dispatch))
+(map
+  (lambda (s)
+    (map (lambda (t)
+           (until (stream-map (lambda (val) (counter '1+) val)
+                              (pairs integers integers))
+                  (wait-for (list s t))
+                  reset-counter
+                  1e4))
+         (iota 5 s))
+    (newline))
+  (iota 5 1))
