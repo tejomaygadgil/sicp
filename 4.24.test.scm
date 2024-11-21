@@ -1,0 +1,6 @@
+(let test-if ((iterations 1e4))
+  (if (= (modulo iterations 1e3) 0)
+      (display "."))
+  (if (= 0 iterations)
+      (display "Done")
+      (test-if (- iterations 1))))
