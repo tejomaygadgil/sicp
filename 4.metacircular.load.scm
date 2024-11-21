@@ -1,0 +1,5 @@
+(define (install-load-package)
+  (define (eval-load exp env)
+    (eval-sequence (read-file (cadr exp)) env))
+  (put 'eval 'load eval-load)
+  'ok)
