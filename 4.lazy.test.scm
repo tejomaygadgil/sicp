@@ -1,0 +1,5 @@
+(load "4.metacircular.test.scm")
+(print "Testing lazy evaluator")
+(test-global-eval '(define (try a b)
+                     (if (= a 0) 1 b)) 'ok)
+(test-global-eval '(try 0 (/ 1 0)) 1)
