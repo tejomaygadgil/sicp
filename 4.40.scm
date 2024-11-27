@@ -1,0 +1,60 @@
+;;;; 4.40
+;; In the multiple dwelling problem, how many sets of assignments are there of people to floors, both before and after the requirement that floor assignments be distinct? It is very inefficient to generate all possible assignments of people to floors and then leave it to backtracking to eliminate them. For example, most of the restrictions depend on only one or two of the person-floor variables, and can thus be imposed before floors have been selected for all the people. Write and demonstrate a much more efficient non-deterministic procedure that solves this problem based upon generating only those possibilities that are not already ruled out by previous restrictions. (Hint: This will require a nest of `let` expressions.)
+
+;;; Answer
+;; We gain efficiency by interleaving requirements with
+;; person-floor generation. This provides an additional
+;; optimization beyond what was submitted in Exercise 4.39.
+(define original-order
+  '(let ((baker (amb 1 2 3 4 5))
+         (cooper (amb 1 2 3 4 5))
+         (fletcher (amb 1 2 3 4 5))
+         (miller (amb 1 2 3 4 5))
+         (smith (amb 1 2 3 4 5)))
+     (require (distinct? (list baker cooper fletcher miller smith)))
+     (require (not (= baker 5)))
+     (require (not (= cooper 1)))
+     (require (not (= fletcher 5)))
+     (require (not (= fletcher 1)))
+     (require (> miller cooper))
+     (require (not (= (abs (- smith fletcher)) 1)))
+     (require (not (= (abs (- fletcher cooper)) 1)))
+     (list (list 'baker baker)
+           (list 'cooper cooper)
+           (list 'fletcher fletcher)
+           (list 'miller miller)
+           (list 'smith smith))))
+(define efficient-order
+  '(let ((baker (amb 1 2 3 4 5)))
+    (require (not (= baker 5)))
+    (let ((cooper (amb 1 2 3 4 5)))
+      (require (not (= cooper 1)))
+      (let ((fletcher (amb 1 2 3 4 5)))
+        (require (not (= fletcher 5)))
+        (require (not (= fletcher 1)))
+        (require (not (= (abs (- fletcher cooper)) 1)))
+        (let ((miller (amb 1 2 3 4 5)))
+          (require (> miller cooper))
+          (let ((smith (amb 1 2 3 4 5)))
+            (require (not (= (abs (- smith fletcher)) 1)))
+            (require (distinct? (list baker cooper fletcher miller smith)))
+            (list (list 'baker baker)
+                  (list 'cooper cooper)
+                  (list 'fletcher fletcher)
+                  (list 'miller miller)
+                  (list 'smith smith)))))))))
+
+;; Test
+(load "4.amb.scm")
+(let ((a1 (amb-global-eval efficient-order))
+      (a2 (amb-global-eval original-order))
+      (time-amb (lambda (amb) (lambda ()
+                               (let loop ()
+                                 (let ((val (next-val amb)))
+                                   (if (not (null? val))
+                                     (begin (loop)))))))))
+  (let ((a1-time (elapsed (time-amb a1)))
+        (a2-time (elapsed (time-amb a2))))
+    (display "Interleaving the restrictions is ") ; ~85% improvement
+    (display (/ (round (* (/ (- a2-time a1-time) a2-time) 1e4)) 1e2))
+    (display "% faster")))
