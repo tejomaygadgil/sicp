@@ -1,0 +1,7 @@
+(define (instantiate skeleton dict)
+  (let loop ((s skeleton))
+    (cond ((atom? s) s)
+          ((skeleton-evaluation? s)
+           (evaluate (evaluation-exp s) dict))
+          (else (cons (loop (car s))
+                      (loop (cdr s)))))))
