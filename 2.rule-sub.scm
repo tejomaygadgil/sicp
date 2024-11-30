@@ -1,0 +1,11 @@
+;; Data
+(load "2.rule-sub.exp.scm")
+(load "2.rule-sub.rule.scm")
+(load "2.rule-sub.pat.scm")
+(load "2.rule-sub.skeleton.scm")
+(load "2.rule-sub.dict.scm")
+;; Proc
+(load "2.rule-sub.evaluate.scm")
+(load "2.rule-sub.instantiate.scm")
+(load "2.rule-sub.match.scm")
+(load "2.rule-sub.simplifier.scm")

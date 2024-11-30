@@ -1,0 +1,31 @@
+(define (apply-rules pattern frame)
+  (define (rename-variables-in rule)
+    ;; Proc
+    (define (make-new-variable var rule-application-id)
+      (cons '? (cons rule-application-id (cdr var))))
+    ;; Mut
+    (define (new-rule-application-id)
+      (set! rule-counter (+ 1 rule-counter))
+      rule-counter)
+    (let ((rule-application-id (new-rule-application-id)))
+      (define (tree-walk exp)
+        (cond ((var? exp)
+               (make-new-variable exp rule-application-id))
+              ((pair? exp)
+               (cons (tree-walk (car exp))
+                     (tree-walk (cdr exp))))
+              (else exp)))
+      (tree-walk rule)))
+  (define (apply-a-rule rule query-pattern query-frame)
+    (let ((clean-rule (rename-variables-in rule)))
+      (let ((unify-result
+             (unify-match query-pattern
+                          (conclusion clean-rule)
+                          query-frame)))
+        (if (eq? unify-result 'failed)
+            the-empty-stream
+            (qeval (rule-body clean-rule)
+                   (singleton-stream unify-result))))))
+  (stream-flatmap (lambda (rule)
+                    (apply-a-rule rule pattern frame))
+                  (fetch-rules pattern frame)))
