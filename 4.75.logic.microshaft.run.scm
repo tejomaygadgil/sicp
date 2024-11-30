@@ -1,0 +1,5 @@
+(load "4.75.logic.scm")
+(load "4.logic.microshaft.data.scm")
+(initialize-data-base microshaft-data-base)
+(newline) (display ";;; Microshaft data-base")
+(query-driver-loop)

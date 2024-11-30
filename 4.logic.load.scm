@@ -1,0 +1,12 @@
+(define (install-load-package)
+  (define (load operands frame-stream)
+    (map (lambda (exp)
+           (prompt-for-input ";;; Loaded input:")
+           (display exp)
+           (newline)
+           (process-query exp))
+         (read-file (car operands)))
+    the-empty-frame-stream)
+  ;; Install
+  (put 'load 'qeval load)
+  'ok)
