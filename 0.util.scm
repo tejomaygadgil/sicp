@@ -13,9 +13,12 @@
                  exps)))
 
 (define (test x y)
-  (if (equal? x y)
-      (print 'pass)
+  (if (equal? x y) 'ok
       (error 'ne: x y)))
+
+(define (catch proc)
+    (guard (c (else (condition/report-string c)))
+    (proc)))
 
 (define (within-delta? actual guess delta)
   (< (abs (- guess actual))

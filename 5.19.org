@@ -1,0 +1,353 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Alyssa P. Hacker wants a /breakpoint/ feature in the simulator to help her debug her machine designs. You have been hired to install this feature for her. She wants to be able to specify a place in the controller sequence where the simulator will stop and allow her to examine the state of the machine. You are to implement a procedure
+
+#+begin_src scheme
+  (set-breakpoint <machine> <label> <n>)
+#+end_src
+
+
+that sets a breakpoint just before the nth instruction after the given label. For example,
+
+#+begin_src scheme
+  (set-breakpoint gcd-machine 'test-b 4)
+#+end_src
+
+installs a breakpoint in gcd-machine just before the assignment to register a. When the simulator reaches the breakpoint it should print the label and the offset of the breakpoint and stop executing instructions. Alyssa can then use get-register-contents and set-register-contents! to manipulate the state of the simulated machine. She should then be able to continue execution by saying
+
+#+begin_src scheme
+  (proceed-machine <machine>)
+#+end_src
+
+She should also be able to remove a specific breakpoint by means of
+
+#+begin_src scheme
+  (cancel-breakpoint <machine> <label> <n>)
+#+end_src
+
+or to remove all breakpoints by means of
+
+#+begin_src scheme
+  (cancel-all-breakpoints <machine>)
+#+end_src
+
+* Answer
+We can implement breakpoints by leveraging the instruction text in ~execute~ to monitor for ~branch~ and ~goto~ statements. Otherwise, we iterate the internal counter and check for any matches with registered breakpoints.
+
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 5.19.register-machine.machine.scm
+  ;; Cons
+  (define (make-machine ops controller-text)
+    (let ((machine (make-new-machine)))
+      ((machine 'install-operations) ops)
+      ((machine 'install-instruction-sequence)
+       (assemble controller-text machine))
+      machine))
+  (define (make-new-machine)
+    (let ((pc (make-register 'pc))
+          (flag (make-register 'flag))
+          (stack (make-stack))
+          (the-instruction-sequence '())
+          (flist (flist-make))
+          (alist (alist-make))
+          (inst-count 0)
+          (trace-inst false)
+          (curr-label-name false)
+          (curr-label-index 1)
+          (breakpoints '()))
+      (let ((the-ops
+             (list (list 'print print)
+                   (list 'initialize-stack
+                         (lambda () (stack 'initialize)))))
+            (register-table
+             (list (list 'pc pc)
+                   (list 'flag flag))))
+        (define (allocate-register name)
+          (if (assoc name register-table)
+              (error "Multiply defined register: " name)
+              (set! register-table
+                    (cons (list name (make-register name))
+                          register-table)))
+          'register-allocated)
+        (define (lookup-register name)
+          (let ((val (assoc name register-table)))
+            (if val (cadr val)
+                (error "Unknown register: " name))))
+        (define (trace-print inst)
+          (when trace-inst
+            (print (instruction-label inst)
+                   (instruction-text inst))))
+        (define (breakpoint-iter inst)
+          (if (member (instruction-text-type (instruction-text inst))
+                      '(branch goto))
+              (begin
+                (set! curr-label-name (instruction-label inst))
+                (set! curr-label-index 1))
+              (set! curr-label-index (1+ curr-label-index))))
+        (define (breakpoint-check inst)
+          (let ((curr-point (list curr-label-name curr-label-index))
+                 (break (lambda (curr-point)
+                          (print 'breakpoint curr-point)
+                          (set! curr-label-index (1+ curr-label-index))))
+                 (next (lambda ()
+                         (breakpoint-iter inst)
+                         (trace-print inst)
+                         ((instruction-execution-proc inst))
+                         (execute))))
+            (if (member curr-point breakpoints)
+                (break curr-point)
+                (next))))
+        (define (execute)
+          (let ((insts (get-contents pc)))
+            (if (null? insts) 'done
+                (breakpoint-check (car insts)))))
+        (define (dispatch m)
+          (cond ((eq? m 'start)
+                 (set-contents! pc the-instruction-sequence)
+                 (execute))
+                ((eq? m 'install-instruction-sequence)
+                 (lambda (seq) (set! the-instruction-sequence seq)))
+                ((eq? m 'allocate-register) allocate-register)
+                ((eq? m 'get-register) lookup-register)
+                ((eq? m 'install-operations)
+                 (lambda (ops) (set! the-ops (append the-ops ops))))
+                ((eq? m 'stack) stack)
+                ((eq? m 'operations) the-ops)
+                ((eq? m 'flist) flist)
+                ((eq? m 'alist) alist)
+                ((eq? m 'data-path-dot)
+                 (lambda (opts) (data-path-dot flist alist opts)))
+                ((eq? m 'inst-count-reset)
+                 (set! inst-count 0))
+                ((eq? m 'inst-count) inst-count)
+                ((eq? m 'trace-on)
+                 (set! trace-inst true))
+                ((eq? m 'trace-off)
+                 (for-each (lambda (register) (register 'trace-off))
+                           (map cadr register-table))
+                 (set! trace-inst false))
+                ((eq? m 'register-trace-on)
+                 (lambda (name)
+                   ((lookup-register name) 'trace-on)
+                   'ok))
+                ((eq? m 'register-trace-off)
+                 (lambda (name)
+                   ((lookup-register name) 'trace-off)
+                   'ok))
+                ((eq? m 'breakpoint-set)
+                 (lambda (label n)
+                   (set! breakpoints (cons (list label n)
+                                           breakpoints))
+                   'ok))
+                ((eq? m 'proceed)
+                 (execute))
+                ((eq? m 'breakpoint-cancel)
+                 (lambda (label n)
+                   (set! breakpoints (delete (list label n)
+                                             breakpoints))
+                   'ok))
+                ((eq? m 'breakpoint-cancel-all)
+                 (set! breakpoints '())
+                 'ok)
+                ((eq? m 'breakpoints) breakpoints)
+                (else
+                 (error "Unknown request -- MACHINE" m))))
+        dispatch)))
+  ;; Interface
+  (define (start machine)
+    (machine 'start))
+  (define (get-register-contents machine register-name)
+    (get-contents (get-register machine register-name)))
+  (define (set-register-contents! machine register-name value)
+    (set-contents! (get-register machine register-name) value)
+    'done)
+  (define (get-register machine reg-name)
+    ((machine 'get-register) reg-name))
+  (define (data-path machine . opts)
+    ((machine 'data-path-dot) opts))
+  (define (set-breakpoint machine label n)
+    ((machine 'breakpoint-set) label n))
+  (define (proceed-machine machine)
+    (machine 'proceed))
+  (define (cancel-breakpoint machine label n)
+    ((machine 'breakpoint-cancel) label n))
+  (define (cancel-all-breakpoints machine)
+    (machine 'breakpoint-cancel-all))
+#+end_src
+
+** Test
+#+begin_src scheme :results output
+  (load "5.13.register-machine.scm")
+  (load "5.17.register-machine.instruction.scm")
+  (load "5.17.register-machine.label.scm")
+  (load "5.18.register-machine.register.scm")
+  (load "5.19.register-machine.machine.scm")
+  (define (mach-fact-run n)
+    (let ((mach-fact
+           (make-machine
+            (list (list '* *)
+                  (list '- -)
+                  (list '= =))
+            '((assign continue (label fact-done))       ; set up final return address
+              fact-loop
+                (test (op =) (reg n) (const 1))
+                (branch (label base-case))
+                ;; Set up for the recursive call by saving n and continue.
+                ;; Set up continue so that the computation will continue
+                ;; at after-fact when the subroutine returns.
+                (save continue)
+                (save n)
+                (assign n (op -) (reg n) (const 1))
+                (assign continue (label after-fact))
+                (goto (label fact-loop))
+              after-fact
+                (restore n)
+                (restore continue)
+                (assign val (op *) (reg n) (reg val))   ; val now contains n(n - 1)!
+                (goto (reg continue))                   ; return to caller
+              base-case
+                (assign val (const 1))                  ; base case: 1! = 1
+                (goto (reg continue))                   ; return to caller
+              fact-done))))
+      (set-register-contents! mach-fact 'n n)
+      (mach-fact 'trace-on)
+      ((mach-fact 'register-trace-on) 'val)
+      (set-breakpoint mach-fact 'fact-loop 3)
+      (start mach-fact)
+      (set-breakpoint mach-fact 'after-fact 2)
+      (proceed-machine mach-fact)
+      (print (mach-fact 'breakpoints))
+      (cancel-breakpoint mach-fact 'fact-loop 3)
+      (proceed-machine mach-fact)
+      (cancel-all-breakpoints mach-fact)
+      (proceed-machine mach-fact)))
+  (mach-fact-run 10)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+#f (assign continue (label fact-done))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+breakpoint (fact-loop 3)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+breakpoint (fact-loop 3)
+((after-fact 2) (fact-loop 3))
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+base-case (assign val (const 1))
+reg val *unassigned* to 1
+base-case (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 1 to 2
+after-fact (goto (reg continue))
+after-fact (restore n)
+breakpoint (after-fact 2)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 2 to 6
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 6 to 24
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 24 to 120
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 120 to 720
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 720 to 5040
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 5040 to 40320
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 40320 to 362880
+after-fact (goto (reg continue))
+after-fact (restore n)
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 362880 to 3628800
+after-fact (goto (reg continue))
+#+end_example

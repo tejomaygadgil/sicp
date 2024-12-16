@@ -1,0 +1,146 @@
+* Question
+Add /instruction counting/ to the register machine simulation. That is, have the machine model keep track of the number of instructions executed. Extend the machine model's interface to accept a new message that prints the value of the instruction count and resets the count to zero.
+
+* Answer
+** Implementation
+#+begin_src scheme :tangle 5.15.register-machine.machine.scm
+  ;; Cons
+  (define (make-machine ops controller-text)
+    (let ((machine (make-new-machine)))
+      ((machine 'install-operations) ops)
+      ((machine 'install-instruction-sequence)
+       (assemble controller-text machine))
+      machine))
+  (define (make-new-machine)
+    (let ((pc (make-register 'pc))
+          (flag (make-register 'flag))
+          (stack (make-stack))
+          (the-instruction-sequence '())
+          (flist (flist-make))
+          (alist (alist-make))
+          (inst-count 0))
+      (let ((the-ops
+             (list (list 'print print)
+                   (list 'initialize-stack
+                         (lambda () (stack 'initialize)))))
+            (register-table
+             (list (list 'pc pc)
+                   (list 'flag flag))))
+        (define (allocate-register name)
+          (if (assoc name register-table)
+              (error "Multiply defined register: " name)
+              (set! register-table
+                    (cons (list name (make-register name))
+                          register-table)))
+          'register-allocated)
+        (define (lookup-register name)
+          (let ((val (assoc name register-table)))
+            (if val (cadr val)
+                (error "Unknown register: " name))))
+        (define (execute)
+          (let ((insts (get-contents pc)))
+            (if (null? insts) 'done
+                (begin
+                  ((instruction-execution-proc (car insts)))
+                  (set! inst-count (1+ inst-count))
+                  (execute)))))
+        (define (dispatch m)
+          (cond ((eq? m 'start)
+                 (set-contents! pc the-instruction-sequence)
+                 (execute))
+                ((eq? m 'install-instruction-sequence)
+                 (lambda (seq) (set! the-instruction-sequence seq)))
+                ((eq? m 'allocate-register) allocate-register)
+                ((eq? m 'get-register) lookup-register)
+                ((eq? m 'install-operations)
+                 (lambda (ops) (set! the-ops (append the-ops ops))))
+                ((eq? m 'stack) stack)
+                ((eq? m 'operations) the-ops)
+                ((eq? m 'flist) flist)
+                ((eq? m 'alist) alist)
+                ((eq? m 'data-path-dot)
+                 (lambda (opts) (data-path-dot flist alist opts)))
+                ((eq? m 'inst-count-reset)
+                 (set! inst-count 0))
+                ((eq? m 'inst-count) inst-count)
+                (else
+                 (error "Unknown request -- MACHINE" m))))
+        dispatch)))
+  ;; Interface
+  (define (start machine)
+    (machine 'start))
+  (define (get-register-contents machine register-name)
+    (get-contents (get-register machine register-name)))
+  (define (set-register-contents! machine register-name value)
+    (set-contents! (get-register machine register-name) value)
+    'done)
+  (define (get-register machine reg-name)
+    ((machine 'get-register) reg-name))
+  (define (data-path machine . opts)
+    ((machine 'data-path-dot) opts))
+#+end_src
+
+** Test
+#+begin_src scheme :results table
+  (load "5.13.register-machine.scm") ; Use simplified register machine API
+  (load "5.register-machine.stack-monitor.scm")
+  (load "5.15.register-machine.machine.scm")
+  (define (mach-fact-run n)
+    (let ((mach-fact
+           (make-machine
+            (list (list '* *)
+                  (list '- -)
+                  (list '= =))
+            '((assign continue (label fact-done))       ; set up final return address
+              fact-loop
+                (test (op =) (reg n) (const 1))
+                (branch (label base-case))
+                ;; Set up for the recursive call by saving n and continue.
+                ;; Set up continue so that the computation will continue
+                ;; at after-fact when the subroutine returns.
+                (save continue)
+                (save n)
+                (assign n (op -) (reg n) (const 1))
+                (assign continue (label after-fact))
+                (goto (label fact-loop))
+              after-fact
+                (restore n)
+                (restore continue)
+                (assign val (op *) (reg n) (reg val))   ; val now contains n(n - 1)!
+                (goto (reg continue))                   ; return to caller
+              base-case
+                (assign val (const 1))                  ; base case: 1! = 1
+                (goto (reg continue))                   ; return to caller
+              fact-done))))
+      (set-register-contents! mach-fact 'n n)
+      (start mach-fact)
+      (list n (mach-fact 'inst-count))))
+  (cons (list 'n 'inst-count)
+        (cons 'hline
+              (map mach-fact-run
+                   (enumerate-interval 1 20))))
+#+end_src
+
+#+RESULTS:
+|  n | inst-count |
+|----+------------|
+|  1 |          5 |
+|  2 |         16 |
+|  3 |         27 |
+|  4 |         38 |
+|  5 |         49 |
+|  6 |         60 |
+|  7 |         71 |
+|  8 |         82 |
+|  9 |         93 |
+| 10 |        104 |
+| 11 |        115 |
+| 12 |        126 |
+| 13 |        137 |
+| 14 |        148 |
+| 15 |        159 |
+| 16 |        170 |
+| 17 |        181 |
+| 18 |        192 |
+| 19 |        203 |
+| 20 |        214 |

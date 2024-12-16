@@ -1,0 +1,88 @@
+* Question
+Measure the number of pushes and the maximum stack depth required to compute $n!$ for various small values of $n$ using the factorial machine shown in figure 5.11. From your data determine formulas in terms of $n$ for the total number of push operations and the maximum stack depth used in computing $n!$ for any $n > 1$. Note that each of these is a linear function of $n$ and is thus determined by two constants. In order to get the statistics printed, you will have to augment the factorial machine with instructions to initialize the stack and print the statistics. You may want to also modify the machine so that it repeatedly reads a value for $n$, computes the factorial, and prints the result (as we did for the GCD machine in figure 5.4), so that you will not have to repeatedly invoke ~get-register-contents~, ~set-register-contents!~, and ~start~.
+
+* Answer
+The total number of pushes and maximum depth achieved is $2 \cdot n - 2$.
+
+#+begin_src scheme :results output
+  (load "5.13.register-machine.scm") ; Use simplified register machine API
+  (load "5.register-machine.stack-monitor.scm")
+  (define (mach-fact-run n)
+    (let ((mach-fact
+           (make-machine
+            (list (list '* *)
+                  (list '- -)
+                  (list '= =))
+            '((assign continue (label fact-done))       ; set up final return address
+              fact-loop
+                (test (op =) (reg n) (const 1))
+                (branch (label base-case))
+                ;; Set up for the recursive call by saving n and continue.
+                ;; Set up continue so that the computation will continue
+                ;; at after-fact when the subroutine returns.
+                (save continue)
+                (save n)
+                (assign n (op -) (reg n) (const 1))
+                (assign continue (label after-fact))
+                (goto (label fact-loop))
+              after-fact
+                (restore n)
+                (restore continue)
+                (assign val (op *) (reg n) (reg val))   ; val now contains n(n - 1)!
+                (goto (reg continue))                   ; return to caller
+              base-case
+                (assign val (const 1))                  ; base case: 1! = 1
+                (goto (reg continue))                   ; return to caller
+              fact-done))))
+      (set-register-contents! mach-fact 'n n)
+      (start mach-fact)
+      (print (list 'n '= n))
+      ((mach-fact 'stack) 'print-statistics)))
+  (map mach-fact-run
+       (enumerate-interval 1 20))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+(n = 1)
+(total-pushes = 0 maximum-depth = 0)
+(n = 2)
+(total-pushes = 2 maximum-depth = 2)
+(n = 3)
+(total-pushes = 4 maximum-depth = 4)
+(n = 4)
+(total-pushes = 6 maximum-depth = 6)
+(n = 5)
+(total-pushes = 8 maximum-depth = 8)
+(n = 6)
+(total-pushes = 10 maximum-depth = 10)
+(n = 7)
+(total-pushes = 12 maximum-depth = 12)
+(n = 8)
+(total-pushes = 14 maximum-depth = 14)
+(n = 9)
+(total-pushes = 16 maximum-depth = 16)
+(n = 10)
+(total-pushes = 18 maximum-depth = 18)
+(n = 11)
+(total-pushes = 20 maximum-depth = 20)
+(n = 12)
+(total-pushes = 22 maximum-depth = 22)
+(n = 13)
+(total-pushes = 24 maximum-depth = 24)
+(n = 14)
+(total-pushes = 26 maximum-depth = 26)
+(n = 15)
+(total-pushes = 28 maximum-depth = 28)
+(n = 16)
+(total-pushes = 30 maximum-depth = 30)
+(n = 17)
+(total-pushes = 32 maximum-depth = 32)
+(n = 18)
+(total-pushes = 34 maximum-depth = 34)
+(n = 19)
+(total-pushes = 36 maximum-depth = 36)
+(n = 20)
+(total-pushes = 38 maximum-depth = 38)
+#+end_example

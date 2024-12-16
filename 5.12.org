@@ -1,0 +1,321 @@
+* Question
+The simulator can be used to help determine the data paths required for implementing a machine with a given controller.  Extend the assembler to store the following information in the machine model:
+
++ a list of all instructions, with duplicates removed, sorted by instruction type (~assign~, ~goto~, and so on)
++ a list (without duplicates) of the registers used to hold entry points (these are the registers referenced by ~goto~ instructions)
++ a list (without duplicates) of the registers that are ~save~d or ~restore~d
++ for each register, a list (without duplicates) of the sources from which it is assigned (for example, the sources for register ~val~ in the factorial machine of *Note figure 5.11 are ~(const 1)~ and ~((op *) (reg n) (reg val))~).
+
+Extend the message-passing interface to the machine to provide access to this new information.  To test your analyzer, define the Fibonacci machine from *Note figure 5.12 and examine the lists you constructed.
+
+* Answer
+We can do better than what is asked in the exercise by developing a data structure to represent the data path /graph/.
+
+A data path is a directed graph connecting registers (rectangle), constants (triangle), tests (circle), operations (trapezoid), labels (triangle), and the stack (rectangle).
+
+We achieve this by editing ~make-machine~ (really, the assembler) to parse the instruction set for nodes and edges and store the result in two internal tables called ~flist~ (for formatting nodes) and ~alist~ (for the adjacency list). A public procedure ~data-path~ formats this data into a plottable DOT graphviz diagram.
+
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+~flist~ sorts each node by the types ~reg~, ~stack~, ~const~, ~label~, ~op~, and ~testop~.
+
+#+begin_src scheme :tangle 5.12.register-machine.data-path.flist.scm
+  (define (flist-make)
+    (let ((table (table-make)))
+      (lambda (m)
+        (cond ((eq? m 'put)
+               (lambda (node)
+                 (let ((type (car node))
+                       (val (cadr node)))
+                   (table-put-append-list table type val)
+                   'ok)))
+              ((eq? m 'get)
+               (map (lambda (key) (cons key (table-get table key)))
+                    flist-keys))
+              (else
+               (error "Unknown request -- flist" m))))))
+  (define flist-keys '(reg stack const label op testop))
+#+end_src
+
+~alist~ stores all incoming edges for each node.
+
+#+begin_src scheme :tangle 5.12.register-machine.data-path.alist.scm
+  (define (alist-make)
+    (let* ((table (table-make))
+           (keys-get (lambda () (table-get table 'keys))))
+      (lambda (m)
+        (cond ((eq? m 'keys) (keys-get))
+              ((eq? m 'put)
+               (lambda (head tail)
+                 (table-put-append-list table 'keys head)
+                 (table-put-append-list table head tail)
+                 'ok))
+              ((eq? m 'get)
+               (map (lambda (key) (list key (table-get table key)))
+                    (keys-get)))
+              (else
+               (error "Unknown request -- alist" m))))))
+  (define (alist-keys alist)
+    (alist 'keys))
+#+end_src
+
+The ~data-path~ abstraction parses incoming instruction test and renders the result. This functionality is extendable!
+
+#+begin_src scheme :tangle 5.12.register-machine.data-path.scm
+  (define (data-path-parse flist alist text)
+    (let ((op-parse
+           (lambda (text)
+             (let ((op (car text))
+                   (args (cdr text)))
+               ((flist 'put) op)
+               (map (lambda (arg)
+                      ((flist 'put) arg)
+                      ((alist 'put) op arg))
+                    args)))))
+      (when (not (symbol? text)) ; ignore labels
+        (let ((inst (car text))
+              (rest (cdr text)))
+          (cond ((eq? inst 'branch) 'skip) ; branch: [label]
+                ((eq? inst 'goto) 'skip) ; goto: [label, reg]
+                ((eq? inst 'save) ; save: [stack <- reg]
+                 (let ((head (list 'stack 'stack))
+                       (tail (cons 'reg rest)))
+                   ((flist 'put) head)
+                   ((flist 'put) tail)
+                   ((alist 'put) head tail)))
+                ((eq? inst 'restore) ; restore: [reg <- stack]
+                 (let ((head (cons 'reg rest))
+                       (tail (list 'stack 'stack)))
+                   ((flist 'put) head)
+                   ((flist 'put) tail)
+                   ((alist 'put) head tail)))
+                ((eq? inst 'perform) ; perform: [op <- args]
+                 (op-parse rest))
+                ((eq? inst 'test) ; test: [op <- args]
+                 (op-parse (cons (list 'testop (cadar rest)) ; rename to 'testop
+                                 (cdr rest))))
+                ((eq? inst 'assign) ; assign: [reg <- src]
+                 (let ((head (list 'reg (car rest)))
+                       (tail (cdr rest)))
+                   ((flist 'put) head)
+                   (if (= (length tail) 1) ; reg, const, label
+                       (let ((tail (car tail)))
+                         ((flist 'put) tail)
+                         ((alist 'put) head tail))
+                       (op-parse tail))))
+                (else
+                 (error "Unknown inst -- DATA PATH" inst)))))))
+  (define (data-path-dot flist alist opts)
+    (let* ((dot-opts (apply string-append
+                            (map (lambda (opt) (format false "~a; " opt))
+                                 opts)))
+           (node-shapes '((reg box)
+                          (stack box)
+                          (const triangle)
+                          (op trapezium)
+                          (testop circle)
+                          (label triangle)))
+           (nodes (flatmap (lambda (x)
+                             (let* ((type (car x))
+                                    (shape (cadr (assoc type node-shapes))))
+                               (map (lambda (name)
+                                      (format false
+                                              "\"~a_~a\"[label=\"~a\" shape=~a]; "
+                                              type name name shape))
+                                    (cdr x))))
+                           (flist 'get)))
+           (edges (flatmap (lambda (x)
+                             (let ((head (car x)))
+                               (map (lambda (tail)
+                                      (format false
+                                              "\"~a_~a\" -> \"~a_~a\"; "
+                                              (car tail) (cadr tail)
+                                              (car head) (cadr head)))
+                                    (cadr x))))
+                           (alist 'get))))
+      (apply string-append
+             (reduce-left append '()
+                          (list (list "digraph { " dot-opts)
+                                nodes edges
+                                (list " }"))))))
+#+end_src
+
+For efficiency, this procedure is called inside of the assembler loop.
+
+#+begin_src scheme :tangle 5.12.register-machine.assembler.scm
+  (define (assemble controller-text machine)
+    (let ((flist (machine 'flist))
+          (alist (machine 'alist)))
+      (define (extract-labels text receive)
+        (if (null? text)
+            (receive '() '())
+            (extract-labels
+             (cdr text)
+             (lambda (insts labels) ; Continuation
+               (let ((next-inst (car text)))
+                 (data-path-parse flist alist next-inst) ; Parse data path
+                 (if (symbol? next-inst)
+                     (receive insts
+                         (cons (make-label-entry next-inst
+                                                 insts)
+                               labels))
+                     (receive (cons (make-instruction next-inst)
+                                    insts)
+                         labels)))))))
+      (define (update-insts! insts labels machine)
+        (let ((pc (get-register machine 'pc))
+              (flag (get-register machine 'flag))
+              (stack (machine 'stack))
+              (ops (machine 'operations)))
+          (for-each
+           (lambda (inst)
+             (set-instruction-execution-proc!
+              inst
+              (make-execution-procedure ; Dispatch on type
+               (instruction-text inst) labels machine
+               pc flag stack ops)))
+           insts)))
+      (extract-labels controller-text
+                      (lambda (insts labels)
+                        (update-insts! insts labels machine)
+                        insts))))
+#+end_src
+
+Finally, ~make-machine~ is extended to store process the data path during construction time, with ~make-new-machine~ holding the data path abstraction data.
+
+#+begin_src scheme :tangle 5.12.register-machine.machine.scm
+  ;; Cons
+  (define (make-machine register-names ops controller-text)
+    (let ((machine (make-new-machine)))
+      (for-each (lambda (register-name)
+                  ((machine 'allocate-register) register-name))
+                register-names)
+      ((machine 'install-operations) ops)
+      ((machine 'install-instruction-sequence)
+       (assemble controller-text machine))
+      machine))
+  (define (make-new-machine)
+    (let ((pc (make-register 'pc))
+          (flag (make-register 'flag))
+          (stack (make-stack))
+          (the-instruction-sequence '())
+          (flist (flist-make))
+          (alist (alist-make)))
+      (let ((the-ops
+             (list (list 'print print)
+                   (list 'initialize-stack
+                         (lambda () (stack 'initialize)))))
+            (register-table
+             (list (list 'pc pc)
+                   (list 'flag flag))))
+        (define (allocate-register name)
+          (if (assoc name register-table)
+              (error "Multiply defined register: " name)
+              (set! register-table
+                    (cons (list name (make-register name))
+                          register-table)))
+          'register-allocated)
+        (define (lookup-register name)
+          (let ((val (assoc name register-table)))
+            (if val (cadr val)
+                (error "Unknown register: " name))))
+        (define (execute)
+          (let ((insts (get-contents pc)))
+            (if (null? insts) 'done
+                (begin
+                  ((instruction-execution-proc (car insts)))
+                  (execute)))))
+        (define (dispatch m)
+          (cond ((eq? m 'start)
+                 (set-contents! pc the-instruction-sequence)
+                 (execute))
+                ((eq? m 'install-instruction-sequence)
+                 (lambda (seq) (set! the-instruction-sequence seq)))
+                ((eq? m 'allocate-register) allocate-register)
+                ((eq? m 'get-register) lookup-register)
+                ((eq? m 'install-operations)
+                 (lambda (ops) (set! the-ops (append the-ops ops))))
+                ((eq? m 'stack) stack)
+                ((eq? m 'operations) the-ops)
+                ((eq? m 'flist) flist)
+                ((eq? m 'alist) alist)
+                ((eq? m 'data-path-dot)
+                 (lambda (opts) (data-path-dot flist alist opts)))
+                (else
+                 (error "Unknown request -- MACHINE" m))))
+        dispatch)))
+  ;; Interface
+  (define (start machine)
+    (machine 'start))
+  (define (get-register-contents machine register-name)
+    (get-contents (get-register machine register-name)))
+  (define (set-register-contents! machine register-name value)
+    (set-contents! (get-register machine register-name) value)
+    'done)
+  (define (get-register machine reg-name)
+    ((machine 'get-register) reg-name))
+  (define (data-path machine . opts)
+    ((machine 'data-path-dot) opts))
+#+end_src
+
+#+begin_src scheme :tangle 5.12.register-machine.scm
+  (load "5.register-machine.scm")
+  (load "5.12.register-machine.data-path.flist.scm")
+  (load "5.12.register-machine.data-path.alist.scm")
+  (load "5.12.register-machine.data-path.scm")
+  (load "5.12.register-machine.assembler.scm")
+  (load "5.12.register-machine.machine.scm")
+  (load "0.efma.scm")
+#+end_src
+
+** Test
+#+begin_src scheme :wrap src dot
+  (load "5.12.register-machine.scm")
+  (define mach-fib
+    (make-machine '(n val continue)
+                  (list (list '< <)
+                        (list '- -)
+                        (list '+ +))
+                  '((assign continue (label fib-done))
+                    fib-loop
+                      (test (op <) (reg n) (const 2))
+                      (branch (label immediate-answer))
+                      ;; set up to compute Fib(n - 1)
+                      (save continue)
+                      (assign continue (label afterfib-n-1))
+                      (save n)                           ; save old value of n
+                      (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+                      (goto (label fib-loop))            ; perform recursive call
+                    afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+                      (restore n)
+                      (restore continue)
+                      ;; set up to compute Fib(n - 2)
+                      (assign n (op -) (reg n) (const 2))
+                      (save continue)
+                      (assign continue (label afterfib-n-2))
+                      (save val)                         ; save Fib(n - 1)
+                      (goto (label fib-loop))
+                    afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+                      (assign n (reg val))               ; n now contains Fib(n - 2)
+                      (restore val)                      ; val now contains Fib(n - 1)
+                      (restore continue)
+                      (assign val                        ;  Fib(n - 1) +  Fib(n - 2)
+                              (op +) (reg val) (reg n))
+                      (goto (reg continue))              ; return to caller, answer is in val
+                    immediate-answer
+                      (assign val (reg n))               ; base case:  Fib(n) = n
+                      (goto (reg continue))
+                    fib-done)))
+  (data-path mach-fib
+             "rankdir=LR"
+             "nodesep=0.8"
+             "splines=ortho"
+             "node[height=1.0]")
+#+end_src
+
+#+RESULTS:
+#+begin_src dot
+digraph { rankdir=LR; nodesep=0.8; splines=ortho; node[height=1.0]; "reg_continue"[label="continue" shape=box]; "reg_n"[label="n" shape=box]; "reg_val"[label="val" shape=box]; "stack_stack"[label="stack" shape=box]; "const_1"[label="1" shape=triangle]; "const_2"[label="2" shape=triangle]; "label_fib-done"[label="fib-done" shape=triangle]; "label_afterfib-n-1"[label="afterfib-n-1" shape=triangle]; "label_afterfib-n-2"[label="afterfib-n-2" shape=triangle]; "op_-"[label="-" shape=trapezium]; "op_+"[label="+" shape=trapezium]; "testop_<"[label="<" shape=circle]; "const_2" -> "testop_<"; "reg_n" -> "testop_<"; "const_1" -> "op_-"; "const_2" -> "op_-"; "reg_n" -> "op_-"; "reg_n" -> "stack_stack"; "reg_continue" -> "stack_stack"; "reg_val" -> "stack_stack"; "stack_stack" -> "reg_n"; "reg_val" -> "reg_n"; "label_fib-done" -> "reg_continue"; "label_afterfib-n-1" -> "reg_continue"; "label_afterfib-n-2" -> "reg_continue"; "stack_stack" -> "reg_continue"; "reg_n" -> "op_+"; "reg_val" -> "op_+"; "stack_stack" -> "reg_val"; "reg_n" -> "reg_val";  }
+#+end_src

@@ -1,0 +1,231 @@
+* 5.11
+** Question
+When we introduced ~save~ and ~restore~ in section 5.1.4, we didn't specify what would happen if you tried to restore a register that was not the last one saved, as in the sequence
+
+#+begin_src scheme :eval no
+  (save y)
+  (save x)
+  (restore y)
+#+end_src
+
+There are several reasonable possibilities for the meaning of ~restore~:
+
+a. ~(restore y)~ puts into ~y~ the last value saved on the stack, regardless of what register that value came from.  This is the way our simulator behaves.  Show how to take advantage of this behavior to eliminate one instruction from the Fibonacci machine of section 5.1.4 (figure 5.12).
+
+b. ~(restore y)~ puts into ~y~ the last value saved on the stack, but only if that value was saved from ~y~; otherwise, it signals an error.  Modify the simulator to behave this way.  You will have to change ~save~ to put the register name on the stack along with the value.
+
+c. ~(restore y)~ puts into ~y~ the last value saved from ~y~ regardless of what other registers were saved after ~y~ and not restored.  Modify the simulator to behave this way.  You will have to associate a separate stack with each register. You should make the ~initialize-stack~ operation initialize all the register stacks.
+
+** Answer
+:PROPERTIES:
+:header-args:scheme: :session *mit:sicp*
+:END:
+We begin by defining a function to test each implementation.
+#+begin_src scheme
+  (define (test-restore)
+    (let* ((inst '((save y)
+                   (save x)
+                   (restore y)))
+           (machine (make-machine '(x y) '() inst)))
+      (set-register-contents! machine 'x 1)
+      (set-register-contents! machine 'y 2)
+      (start machine) ; Run instructions
+      (get-register-contents machine 'y)))
+#+end_src
+
+*** a.
+As expected, the textbook simulator is not register-aware: restoring ~y~ after saving ~x~ yields the value of ~x~.
+
+#+begin_src scheme
+  (load "5.register-machine.scm")
+  (test (test-restore) 1)
+#+end_src
+
+#+RESULTS:
+: ok
+
+We can leverage this behavior in ~afterfib-n-2~ to pop the saved value of ~val~ (which represents $Fib(n - 1)$) onto ~n~ instead of saving ~val~ onto ~n~, and then restoring ~val~. This works out because the addition is commutative, so it doesn't matter if we add $Fib(n - 1)$ to $Fib(n - 2)$, or vice-versa.
+
+#+begin_src scheme
+  (load "5.register-machine.scm")
+  (let* ((inst '((assign continue (label fib-done))
+                 fib-loop
+                   (test (op <) (reg n) (const 2))
+                     (branch (label immediate-answer))
+                   ;; set up to compute Fib(n - 1)
+                   (save continue)
+                   (assign continue (label afterfib-n-1))
+                   (save n)                           ; save old value of n
+                   (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+                   (goto (label fib-loop))            ; perform recursive call
+                 afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+                   (restore n)
+                   (restore continue)
+                   ;; set up to compute Fib(n - 2)
+                   (assign n (op -) (reg n) (const 2))
+                   (save continue)
+                   (assign continue (label afterfib-n-2))
+                   (save val)                         ; save Fib(n - 1)
+                   (goto (label fib-loop))
+                 afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+                   ;; (assign n (reg val))               ; n now contains Fib(n - 2)
+                   ;; (restore val)                      ; val now contains Fib(n - 1)
+                   (restore n) ;; Added - n contains Fib(n - 1), val contains Fib(n - 2)
+                   (restore continue)
+                   (assign val                        ;  Fib(n - 2) +  Fib(n - 1) (n.b. swapped!)
+                           (op +) (reg val) (reg n))
+                   (goto (reg continue))              ; return to caller, answer is in val
+                 immediate-answer
+                   (assign val (reg n))               ; base case:  Fib(n) = n
+                   (goto (reg continue))
+                 fib-done))
+         (machine (make-machine '(n val continue)
+                                (list (list '< <)
+                                      (list '- -)
+                                      (list '+ +))
+                                inst)))
+    (set-register-contents! machine 'n 10)
+    (start machine)
+    (test (get-register-contents machine 'val) 55))
+#+end_src
+
+#+RESULTS:
+: ok
+
+*** b.
+To signal an out-of-order error, we must track the register name of each value pushed onto the stack. We introduce a simple ~stack-record~ data abstraction to aid in this task.
+
+#+begin_src scheme :tangle 5.11.b.register-machine.save-restore.scm :eval no
+  (define (install-save-restore-package)
+   ;;; Stack record
+    ;; Cons
+    (define (make-stack-record name value)
+      (cons name value))
+    ;; Sel
+    (define (get-stack-record-name record)
+      (car record))
+    (define (get-stack-record-value record)
+      (cadr record))
+   ;;; Inst
+    ;; Sel
+    (define (stack-inst-reg-name inst)
+      (cadr inst))
+    ;; Proc
+    (define (make-save inst labels machine
+                       pc flag stack ops)
+      (let* ((reg-name (stack-inst-reg-name inst))
+             (reg (get-register machine reg-name)))
+        (lambda ()
+          (push stack (make-stack-record reg-name (get-contents reg)))
+          (advance-pc pc))))
+    (define (make-restore inst labels machine
+                          pc flag stack ops)
+      (let* ((reg-name (stack-inst-reg-name inst))
+             (reg (get-register machine reg-name)))
+        (lambda ()
+          (let* ((stack-record (pop stack))
+                 (stack-name (get-stack-record-name stack-record)))
+            (if (eq? reg-name stack-name)
+                (begin (set-contents! reg (get-stack-record-value stack-record))
+                       (advance-pc pc))
+                (error "Register mismatch -- RESTORE" stack-name reg-name))))))
+    ;; Install
+    (put 'exec 'save make-save)
+    (put 'exec 'restore make-restore)
+    'done)
+#+end_src
+
+This method raises an error when ~y~ is restored after saving ~x~.
+
+#+begin_src scheme
+  (load "5.register-machine.scm")
+  (load "5.11.b.register-machine.save-restore.scm")
+  (install-save-restore-package)
+  (catch test-restore)
+#+end_src
+
+#+RESULTS:
+: Register mismatch -- RESTORE x y
+
+*** c.
+To implement register-aware stacks, we modify the ~stack~ data abstraction to return a different stack based on register name.
+
+#+begin_src scheme :tangle 5.11.c.register-machine.stack.scm :eval no
+  ;; Cons
+  (define (make-stack)
+    (let ((stacks '())
+          (cons-stack
+           (lambda ()
+             (let ((s '()))
+               (lambda (m)
+                 (cond ((eq? m 'push)
+                        (lambda (x)
+                          (set! s (cons x s))))
+                       ((eq? m 'pop)
+                        (if (null? s)
+                            (error "Empty stack -- POP")
+                            (let ((top (car s)))
+                              (set! s (cdr s))
+                              top)))
+                       ((eq? m 'initialize)
+                        (set! s '())
+                        'done)
+                       (else
+                        (error "Unknown request -- STACK" m))))))))
+      (lambda (name)
+        (let ((record (assoc name stacks)))
+          (if record (cadr record)
+              (let* ((new-stack (cons-stack))
+                     (new-record (list name new-stack)))
+                (set! stacks (cons new-record stacks))
+                new-stack))))))
+  ;; Interface
+  (define (pop stack)
+    (stack 'pop))
+  (define (push stack val)
+    ((stack 'push) val))
+#+end_src
+
+
+We can use this edit to push to and pull from the stack associated with each register.
+
+#+begin_src scheme :tangle 5.11.c.register-machine.save-restore.scm :eval no
+  (define (install-save-restore-package)
+    ;; Sel
+    (define (stack-inst-reg-name inst)
+      (cadr inst))
+    ;; Proc
+    (define (make-save inst labels machine
+                       pc flag stack ops)
+      (let* ((reg-name (stack-inst-reg-name inst))
+             (reg-stack (stack reg-name))
+             (reg (get-register machine reg-name)))
+        (lambda ()
+          (push reg-stack (get-contents reg))
+          (advance-pc pc))))
+    (define (make-restore inst labels machine
+                          pc flag stack ops)
+      (let* ((reg-name (stack-inst-reg-name inst))
+             (reg-stack (stack reg-name))
+             (reg (get-register machine reg-name)))
+        (lambda ()
+          (set-contents! reg (pop reg-stack))
+          (advance-pc pc))))
+    ;; Install
+    (put 'exec 'save make-save)
+    (put 'exec 'restore make-restore)
+    'done)
+#+end_src
+
+This approach returns ~y~ its saved value.
+
+#+begin_src scheme
+  (load "5.register-machine.scm")
+  (load "5.11.c.register-machine.save-restore.scm")
+  (load "5.11.c.register-machine.stack.scm")
+  (install-save-restore-package)
+  (test (catch test-restore) 2)
+#+end_src
+
+#+RESULTS:
+: ok

@@ -1,0 +1,7 @@
+(load "5.register-machine.scm")
+(load "5.12.register-machine.data-path.flist.scm")
+(load "5.12.register-machine.data-path.alist.scm")
+(load "5.12.register-machine.data-path.scm")
+(load "5.13.register-machine.assembler.scm")
+(load "5.13.register-machine.machine.scm")
+(load "0.efma.scm")

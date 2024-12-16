@@ -1,0 +1,182 @@
+* Question
+Modify the simulator so that it uses the controller sequence to determine what registers the machine has rather than requiring a list of registers as an argument to ~make-machine~. Instead of pre-allocating the registers in ~make-machine~, you can allocate them one at a time when they are first seen during assembly of the instructions.
+
+* Answer
+This solution is easy given our work from Ex. 5.12. We simply call and define an ~update-registers!~ that extracts the register names from ~flist~ prior to building the execution procedures in ~update-insts~.
+
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 5.13.register-machine.assembler.scm
+  (define (assemble controller-text machine)
+    (let ((flist (machine 'flist))
+          (alist (machine 'alist)))
+      (define (extract-labels text receive)
+        (if (null? text)
+            (receive '() '())
+            (extract-labels
+             (cdr text)
+             (lambda (insts labels) ; Continuation
+               (let ((next-inst (car text)))
+                 (data-path-parse flist alist next-inst) ; Parse data path
+                 (if (symbol? next-inst)
+                     (receive insts
+                         (cons (make-label-entry next-inst
+                                                 insts)
+                               labels))
+                     (receive (cons (make-instruction next-inst)
+                                    insts)
+                         labels)))))))
+      (define (update-registers!)
+        (for-each (lambda (register-name)
+                    ((machine 'allocate-register) register-name))
+                  (cdr (assoc 'reg (flist 'get)))))
+      (define (update-insts! insts labels machine)
+        (let ((pc (get-register machine 'pc))
+              (flag (get-register machine 'flag))
+              (stack (machine 'stack))
+              (ops (machine 'operations)))
+          (for-each
+           (lambda (inst)
+             (set-instruction-execution-proc!
+              inst
+              (make-execution-procedure ; Dispatch on type
+               (instruction-text inst) labels machine
+               pc flag stack ops)))
+           insts)))
+      (extract-labels controller-text
+                      (lambda (insts labels)
+                        (update-registers!) ; Update registers
+                        (update-insts! insts labels machine)
+                        insts))))
+#+end_src
+
+#+begin_src scheme :tangle 5.13.register-machine.machine.scm
+  ;; Cons
+  (define (make-machine ops controller-text)
+    (let ((machine (make-new-machine)))
+      ((machine 'install-operations) ops)
+      ((machine 'install-instruction-sequence)
+       (assemble controller-text machine))
+      machine))
+  (define (make-new-machine)
+    (let ((pc (make-register 'pc))
+          (flag (make-register 'flag))
+          (stack (make-stack))
+          (the-instruction-sequence '())
+          (flist (flist-make))
+          (alist (alist-make)))
+      (let ((the-ops
+             (list (list 'print print)
+                   (list 'initialize-stack
+                         (lambda () (stack 'initialize)))))
+            (register-table
+             (list (list 'pc pc)
+                   (list 'flag flag))))
+        (define (allocate-register name)
+          (if (assoc name register-table)
+              (error "Multiply defined register: " name)
+              (set! register-table
+                    (cons (list name (make-register name))
+                          register-table)))
+          'register-allocated)
+        (define (lookup-register name)
+          (let ((val (assoc name register-table)))
+            (if val (cadr val)
+                (error "Unknown register: " name))))
+        (define (execute)
+          (let ((insts (get-contents pc)))
+            (if (null? insts) 'done
+                (begin
+                  ((instruction-execution-proc (car insts)))
+                  (execute)))))
+        (define (dispatch m)
+          (cond ((eq? m 'start)
+                 (set-contents! pc the-instruction-sequence)
+                 (execute))
+                ((eq? m 'install-instruction-sequence)
+                 (lambda (seq) (set! the-instruction-sequence seq)))
+                ((eq? m 'allocate-register) allocate-register)
+                ((eq? m 'get-register) lookup-register)
+                ((eq? m 'install-operations)
+                 (lambda (ops) (set! the-ops (append the-ops ops))))
+                ((eq? m 'stack) stack)
+                ((eq? m 'operations) the-ops)
+                ((eq? m 'flist) flist)
+                ((eq? m 'alist) alist)
+                ((eq? m 'data-path-dot)
+                 (lambda (opts) (data-path-dot flist alist opts)))
+                (else
+                 (error "Unknown request -- MACHINE" m))))
+        dispatch)))
+  ;; Interface
+  (define (start machine)
+    (machine 'start))
+  (define (get-register-contents machine register-name)
+    (get-contents (get-register machine register-name)))
+  (define (set-register-contents! machine register-name value)
+    (set-contents! (get-register machine register-name) value)
+    'done)
+  (define (get-register machine reg-name)
+    ((machine 'get-register) reg-name))
+  (define (data-path machine . opts)
+    ((machine 'data-path-dot) opts))
+#+end_src
+
+#+begin_src scheme :tangle 5.13.register-machine.scm
+  (load "5.register-machine.scm")
+  (load "5.12.register-machine.data-path.flist.scm")
+  (load "5.12.register-machine.data-path.alist.scm")
+  (load "5.12.register-machine.data-path.scm")
+  (load "5.13.register-machine.assembler.scm")
+  (load "5.13.register-machine.machine.scm")
+  (load "0.efma.scm")
+#+end_src
+
+** Test
+#+begin_src scheme
+  (load "5.13.register-machine.scm")
+  (define (fib-test m n)
+    (set-register-contents! m 'n n)
+    (start m)
+    (get-register-contents m 'val))
+  (define mach-fib
+    (make-machine (list (list '< <)
+                        (list '- -)
+                        (list '+ +))
+                  '((assign continue (label fib-done))
+                    fib-loop
+                      (test (op <) (reg n) (const 2))
+                      (branch (label immediate-answer))
+                      ;; set up to compute Fib(n - 1)
+                      (save continue)
+                      (assign continue (label afterfib-n-1))
+                      (save n)                           ; save old value of n
+                      (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+                      (goto (label fib-loop))            ; perform recursive call
+                    afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+                      (restore n)
+                      (restore continue)
+                      ;; set up to compute Fib(n - 2)
+                      (assign n (op -) (reg n) (const 2))
+                      (save continue)
+                      (assign continue (label afterfib-n-2))
+                      (save val)                         ; save Fib(n - 1)
+                      (goto (label fib-loop))
+                    afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+                      (assign n (reg val))               ; n now contains Fib(n - 2)
+                      (restore val)                      ; val now contains Fib(n - 1)
+                      (restore continue)
+                      (assign val                        ;  Fib(n - 1) +  Fib(n - 2)
+                              (op +) (reg val) (reg n))
+                      (goto (reg continue))              ; return to caller, answer is in val
+                    immediate-answer
+                      (assign val (reg n))               ; base case:  Fib(n) = n
+                      (goto (reg continue))
+                    fib-done)))
+  (fib-test mach-fib 10)
+#+end_src
+
+#+RESULTS:
+: 55

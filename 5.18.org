@@ -1,0 +1,309 @@
+* Question
+Modify the ~make-register~ procedure of section 5.2.1 so that registers can be traced. Registers should accept messages that turn tracing on and off. When a register is traced, assigning a value to the register should print the name of the register, the old contents of the register, and the new contents being assigned. Extend the interface to the machine model to permit you to turn tracing on and off for designated machine registers.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 5.18.register-machine.register.scm
+  ;; Cons
+  (define (make-register name)
+    (let ((contents '*unassigned*)
+          (trace-on false))
+      (define (dispatch m)
+        (cond ((eq? m 'get) contents)
+              ((eq? m 'set)
+               (lambda (value)
+                 (when trace-on
+                   (print 'reg name contents 'to value))
+                 (set! contents value)))
+              ((eq? m 'trace-on)
+               (set! trace-on true))
+              ((eq? m 'trace-off)
+               (set! trace-off false))
+              (else
+               (error "Unknown request -- REGISTER" m))))
+      dispatch))
+  ;; Interface
+  (define (get-contents register)
+    (register 'get))
+  (define (set-contents! register value)
+    ((register 'set) value))
+  ;; Proc
+  (define (advance-pc pc)
+    (set-contents! pc (cdr (get-contents pc))))
+#+end_src
+
+#+begin_src scheme :tangle 5.18.register-machine.machine.scm
+  ;; Cons
+  (define (make-machine ops controller-text)
+    (let ((machine (make-new-machine)))
+      ((machine 'install-operations) ops)
+      ((machine 'install-instruction-sequence)
+       (assemble controller-text machine))
+      machine))
+  (define (make-new-machine)
+    (let ((pc (make-register 'pc))
+          (flag (make-register 'flag))
+          (stack (make-stack))
+          (the-instruction-sequence '())
+          (flist (flist-make))
+          (alist (alist-make))
+          (inst-count 0)
+          (trace-inst false))
+      (let ((the-ops
+             (list (list 'print print)
+                   (list 'initialize-stack
+                         (lambda () (stack 'initialize)))))
+            (register-table
+             (list (list 'pc pc)
+                   (list 'flag flag))))
+        (define (allocate-register name)
+          (if (assoc name register-table)
+              (error "Multiply defined register: " name)
+              (set! register-table
+                    (cons (list name (make-register name))
+                          register-table)))
+          'register-allocated)
+        (define (lookup-register name)
+          (let ((val (assoc name register-table)))
+            (if val (cadr val)
+                (error "Unknown register: " name))))
+        (define (execute)
+          (let ((insts (get-contents pc)))
+            (if (null? insts) 'done
+                (let ((next-inst (car insts)))
+                  (when trace-inst
+                    (print (instruction-label next-inst)
+                           (instruction-text next-inst)))
+                  ((instruction-execution-proc next-inst))
+                  (execute)))))
+        (define (dispatch m)
+          (cond ((eq? m 'start)
+                 (set-contents! pc the-instruction-sequence)
+                 (execute))
+                ((eq? m 'install-instruction-sequence)
+                 (lambda (seq) (set! the-instruction-sequence seq)))
+                ((eq? m 'allocate-register) allocate-register)
+                ((eq? m 'get-register) lookup-register)
+                ((eq? m 'install-operations)
+                 (lambda (ops) (set! the-ops (append the-ops ops))))
+                ((eq? m 'stack) stack)
+                ((eq? m 'operations) the-ops)
+                ((eq? m 'flist) flist)
+                ((eq? m 'alist) alist)
+                ((eq? m 'data-path-dot)
+                 (lambda (opts) (data-path-dot flist alist opts)))
+                ((eq? m 'inst-count-reset)
+                 (set! inst-count 0))
+                ((eq? m 'inst-count) inst-count)
+                ((eq? m 'trace-on)
+                 (set! trace-inst true))
+                ((eq? m 'trace-off)
+                 (for-each (lambda (register) (register 'trace-off))
+                           (map cadr register-table))
+                 (set! trace-inst false))
+                ((eq? m 'register-trace-on)
+                 (lambda (name)
+                   ((lookup-register name) 'trace-on)
+                   'ok))
+                ((eq? m 'register-trace-off)
+                 (lambda (name)
+                   ((lookup-register name) 'trace-off)
+                   'ok))
+                (else
+                 (error "Unknown request -- MACHINE" m))))
+        dispatch)))
+  ;; Interface
+  (define (start machine)
+    (machine 'start))
+  (define (get-register-contents machine register-name)
+    (get-contents (get-register machine register-name)))
+  (define (set-register-contents! machine register-name value)
+    (set-contents! (get-register machine register-name) value)
+    'done)
+  (define (get-register machine reg-name)
+    ((machine 'get-register) reg-name))
+  (define (data-path machine . opts)
+    ((machine 'data-path-dot) opts))
+#+end_src
+
+** Test
+#+begin_src scheme :results output
+  (load "5.13.register-machine.scm")
+  (load "5.17.register-machine.instruction.scm")
+  (load "5.17.register-machine.label.scm")
+  (load "5.18.register-machine.register.scm")
+  (load "5.18.register-machine.machine.scm")
+  (define (mach-fact-run n)
+    (let ((mach-fact
+           (make-machine
+            (list (list '* *)
+                  (list '- -)
+                  (list '= =))
+            '((assign continue (label fact-done))       ; set up final return address
+              fact-loop
+                (test (op =) (reg n) (const 1))
+                (branch (label base-case))
+                ;; Set up for the recursive call by saving n and continue.
+                ;; Set up continue so that the computation will continue
+                ;; at after-fact when the subroutine returns.
+                (save continue)
+                (save n)
+                (assign n (op -) (reg n) (const 1))
+                (assign continue (label after-fact))
+                (goto (label fact-loop))
+              after-fact
+                (restore n)
+                (restore continue)
+                (assign val (op *) (reg n) (reg val))   ; val now contains n(n - 1)!
+                (goto (reg continue))                   ; return to caller
+              base-case
+                (assign val (const 1))                  ; base case: 1! = 1
+                (goto (reg continue))                   ; return to caller
+              fact-done))))
+      (set-register-contents! mach-fact 'n n)
+      (mach-fact 'trace-on)
+      ((mach-fact 'register-trace-on) 'n)
+      ((mach-fact 'register-trace-on) 'val)
+      (start mach-fact)))
+  (mach-fact-run 10)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+#f (assign continue (label fact-done))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 10 to 9
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 9 to 8
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 8 to 7
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 7 to 6
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 6 to 5
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 5 to 4
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 4 to 3
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 3 to 2
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+fact-loop (save continue)
+fact-loop (save n)
+fact-loop (assign n (op -) (reg n) (const 1))
+reg n 2 to 1
+fact-loop (assign continue (label after-fact))
+fact-loop (goto (label fact-loop))
+fact-loop (test (op =) (reg n) (const 1))
+fact-loop (branch (label base-case))
+base-case (assign val (const 1))
+reg val *unassigned* to 1
+base-case (goto (reg continue))
+after-fact (restore n)
+reg n 1 to 2
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 1 to 2
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 2 to 3
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 2 to 6
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 3 to 4
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 6 to 24
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 4 to 5
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 24 to 120
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 5 to 6
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 120 to 720
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 6 to 7
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 720 to 5040
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 7 to 8
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 5040 to 40320
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 8 to 9
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 40320 to 362880
+after-fact (goto (reg continue))
+after-fact (restore n)
+reg n 9 to 10
+after-fact (restore continue)
+after-fact (assign val (op *) (reg n) (reg val))
+reg val 362880 to 3628800
+after-fact (goto (reg continue))
+#+end_example
