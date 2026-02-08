@@ -1,0 +1,82 @@
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+* Question
+Draw the box-and-pointer representation and the memory-vector representation (as in figure 5.14) of the list structure produced by
+
+#+begin_src scheme
+  (define x (cons 1 2))
+  (define y (list x x))
+#+end_src
+
+with the free pointer initially ~p1~. What is the final value of ~free~? What pointers represent the values of ~x~ and ~y~?
+
+* Answer
+Recalling
+
+#+begin_src scheme
+  (assign <reg1> (op cons) (reg <reg2>) (reg <reg3>))
+#+end_src
+
+is implemented as
+
+#+begin_src scheme
+  (perform
+   (op vector-set!) (reg the-cars) (reg free) (reg <reg2>))
+  (perform
+   (op vector-set!) (reg the-cdrs) (reg free) (reg <reg3>))
+  (assign <reg1> (reg free))
+  (assign free (op +) (reg free) (const 1))
+#+end_src
+
+We decompose the provided expressions assuming that ~x~ and ~y~ are registers, and that ~y~ is constructed recursively starting with ~(cons x '())~:
+
+#+begin_src scheme
+  ;; 1. (define x (cons 1 2))
+  (perform (op vector-set!) (reg the-cars) (reg free) 1)
+  (perform (op vector-set!) (reg the-cars) (reg free) 2)
+  (assign x (reg free)) ; Assume x and y are registers as we don't know how to define variables yet
+  (assign free (op +) (reg free (const 1)))
+  ;; 2. (define y (list x x)) --> (define y (cons x (cons x '())))
+  ;; 2a. (cons x '())
+  (perform (op vector-set!) (reg the-cars) (reg free) (reg x)) ; Recurse from bottom
+  (perform (op vector-set!) (reg the-cars) (reg free) nil)
+  (assign y (reg free))
+  (assign free (op +) (reg free (const 1)))
+  ;; 2b. (cons x y)
+  (perform (op vector-set!) (reg the-cars) (reg free) (reg x))
+  (perform (op vector-set!) (reg the-cars) (reg free) (reg y)) ; Build y recursively
+  (assign y (reg free))
+  (assign free (op +) (reg free (const 1)))
+#+end_src
+
+We arrive the following structure:
+
+#+begin_src dot
+  digraph {
+    node[height=0.4]
+    node[shape=record]
+    subgraph cluster_1 {
+      margin=20
+      x[label="<name>x|<val>."]
+      y[label="<name>y|<val>."]
+      f[label="<name>free|<val>."]
+    }
+    subgraph cluster_2 {
+      margin=20
+      color=transparent
+      p1[label="<car>1|<cdr>2" xlabel=1]
+      p2[label="<car>.|<cdr>." xlabel=3]
+      p3[label="<car>.|<cdr>/" xlabel=2]
+    }
+    p2:cdr -> p3:car
+    p2:car -> p1:car
+    p3:car -> p1:car
+    x:val -> p1:car
+    y:val -> p2:car
+    f:val -> t:p4
+    t [label="{ addr | 0 | 1  | 2  | 3  | <p4> 4 | 5 } | \
+              { cars |   | n1 | p1 | p1 |        |   } | \
+              { cdrs |   | n2 | e0 | p2 |        |   }"]
+  }
+#+end_src

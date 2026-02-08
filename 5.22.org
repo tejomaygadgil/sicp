@@ -1,0 +1,119 @@
+* Question
+Exercise 3.12 of section 3.3.1 presented an ~append~ procedure that appends two lists to form a new list and an ~append!~ procedure that splices two lists together. Design a register machine to implement each of these procedures. Assume that the list-structure memory operations are available as primitive operations.
+
+* Answer
+** a. ~append~
+#+begin_src scheme :eval no
+  (define (append x y)
+    (if (null? x) y
+        (cons (car x)
+              (append (cdr x) y))))
+#+end_src
+
+#+begin_src scheme :results output
+  (load "5.19.register-machine.scm")
+  (let ((inst '(init
+                (assign continue (label done))
+                ;; Test recursion
+                main
+                (test (op null?) (reg x))
+                (branch (label restore))
+                (goto (label analyze))
+                ;; Base step
+                restore
+                (assign x (reg y))
+                (goto (reg continue))
+                ;; Recursive step
+                analyze
+                (assign tmp (op car) (reg x))
+                (save tmp)
+                (save continue)
+                (assign continue (label combine))
+                (assign x (op cdr) (reg x))
+                (goto (label main))
+                ;; Combine
+                combine
+                (restore continue)
+                (assign tmp (reg x))
+                (restore x)
+                (assign x (op cons) (reg x) (reg tmp))
+                (goto (reg continue))
+                ;; Finished
+                done)))
+    (let ((x '(1 2 3))
+          (y '(4 5 6))
+          (mach (make-machine
+                 (list (list 'null? null?)
+                       (list 'cons cons)
+                       (list 'car car)
+                       (list 'cdr cdr))
+                 inst)))
+      ((mach 'register-trace-on) 'x)
+      ((mach 'register-trace-on) 'y)
+      (set-register-contents! mach 'x x)
+      (set-register-contents! mach 'y y)
+      (start mach)))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+reg x *unassigned* to (1 2 3)
+reg y *unassigned* to (4 5 6)
+reg x (1 2 3) to (2 3)
+reg x (2 3) to (3)
+reg x (3) to ()
+reg x () to (4 5 6)
+reg x (4 5 6) to 3
+reg x 3 to (3 4 5 6)
+reg x (3 4 5 6) to 2
+reg x 2 to (2 3 4 5 6)
+reg x (2 3 4 5 6) to 1
+reg x 1 to (1 2 3 4 5 6)
+#+end_example
+
+** b. ~append!~
+#+begin_src scheme :eval no
+  (define (append! x y)
+    (define (last-pair x)
+      (if (null? (cdr x)) x
+          (last-pair (cdr x))))
+    (set-cdr! (last-pair x) y)
+    x)
+#+end_src
+
+#+begin_src scheme :results output
+  (load "5.19.register-machine.scm")
+  (let ((inst '(;; Assign pointer
+                init
+                (assign ptr (reg x))
+                ;; Iterate pointer
+                main
+                (assign ptr-cdr (op cdr) (reg ptr))
+                (test (op null?) (reg ptr-cdr))
+                (branch (label done))
+                (assign ptr (reg ptr-cdr))
+                (goto (label main))
+                ;; Finished
+                done
+                (perform (op set-cdr!) (reg ptr) (reg y))
+                (assign x (reg x)))))
+    (let ((x '(1 2 3))
+          (y '(4 5 6))
+          (mach (make-machine
+                 (list (list 'null? null?)
+                       (list 'set-cdr! set-cdr!)
+                       (list 'cdr cdr))
+                 inst)))
+      ((mach 'register-trace-on) 'x)
+      ((mach 'register-trace-on) 'y)
+      (set-register-contents! mach 'x x)
+      (set-register-contents! mach 'y y)
+      (start mach)))
+#+end_src
+
+#+RESULTS:
+:
+: reg x *unassigned* to (1 2 3)
+: reg y *unassigned* to (4 5 6)
+: reg x (1 2 3 4 5 6) to (1 2 3 4 5 6)
