@@ -21,7 +21,7 @@ Modify the ~make-register~ procedure of section 5.2.1 so that registers can be t
               ((eq? m 'trace-on)
                (set! trace-on true))
               ((eq? m 'trace-off)
-               (set! trace-off false))
+               (set! trace-on false))
               (else
                (error "Unknown request -- REGISTER" m))))
       dispatch))

@@ -8,14 +8,13 @@ Alyssa P. Hacker wants a /breakpoint/ feature in the simulator to help her debug
   (set-breakpoint <machine> <label> <n>)
 #+end_src
 
-
 that sets a breakpoint just before the nth instruction after the given label. For example,
 
 #+begin_src scheme
   (set-breakpoint gcd-machine 'test-b 4)
 #+end_src
 
-installs a breakpoint in gcd-machine just before the assignment to register a. When the simulator reaches the breakpoint it should print the label and the offset of the breakpoint and stop executing instructions. Alyssa can then use get-register-contents and set-register-contents! to manipulate the state of the simulated machine. She should then be able to continue execution by saying
+installs a breakpoint in ~gcd-machine~ just before the assignment to register ~a~. When the simulator reaches the breakpoint it should print the label and the offset of the breakpoint and stop executing instructions. Alyssa can then use ~get-register-contents~ and ~set-register-contents!~ to manipulate the state of the simulated machine. She should then be able to continue execution by saying
 
 #+begin_src scheme
   (proceed-machine <machine>)
@@ -34,7 +33,7 @@ or to remove all breakpoints by means of
 #+end_src
 
 * Answer
-We can implement breakpoints by leveraging the instruction text in ~execute~ to monitor for ~branch~ and ~goto~ statements. Otherwise, we iterate the internal counter and check for any matches with registered breakpoints.
+Our breakpoint implementation checks each step against all registered breakpoints. We leverage the instruction text in ~execute~ to reset the counter for ~branch~ and ~goto~ statements.
 
 ** Implementation
 :PROPERTIES:
@@ -180,13 +179,17 @@ We can implement breakpoints by leveraging the instruction text in ~execute~ to 
     (machine 'breakpoint-cancel-all))
 #+end_src
 
-** Test
-#+begin_src scheme :results output
+#+begin_src scheme :tangle 5.19.register-machine.scm
   (load "5.13.register-machine.scm")
   (load "5.17.register-machine.instruction.scm")
   (load "5.17.register-machine.label.scm")
   (load "5.18.register-machine.register.scm")
   (load "5.19.register-machine.machine.scm")
+#+end_src
+
+** Test
+#+begin_src scheme :results output
+  (load "5.19.register-machine.scm")
   (define (mach-fact-run n)
     (let ((mach-fact
            (make-machine

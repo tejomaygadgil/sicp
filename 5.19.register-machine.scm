@@ -1,0 +1,5 @@
+(load "5.13.register-machine.scm")
+(load "5.17.register-machine.instruction.scm")
+(load "5.17.register-machine.label.scm")
+(load "5.18.register-machine.register.scm")
+(load "5.19.register-machine.machine.scm")

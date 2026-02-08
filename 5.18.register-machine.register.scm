@@ -12,7 +12,7 @@
             ((eq? m 'trace-on)
              (set! trace-on true))
             ((eq? m 'trace-off)
-             (set! trace-off false))
+             (set! trace-on false))
             (else
              (error "Unknown request -- REGISTER" m))))
     dispatch))
