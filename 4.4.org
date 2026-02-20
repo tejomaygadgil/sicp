@@ -1,0 +1,104 @@
+* Question
+Recall the definitions of the special forms ~and~ and ~or~ from chapter 1:
+
++ ~and~: The expressions are evaluated from left to right. If any expression evaluates to false, false is returned; any remaining expressions are not evaluated. If all the expressions evaluate to true values, the value of the last expression is returned. If there are no expressions then true is returned.
+
++ ~or~: The expressions are evaluated from left to right. If any expression evaluates to a true value, that value is returned; any remaining expressions are not evaluated. If all expressions evaluate to false, or if there are no expressions, then false is returned.
+
+Install ~and~ and ~or~ as new special forms for the evaluator by defining appropriate syntax procedures and evaluation procedures ~eval-and~ and ~eval-or~. Alternatively, show how to implement ~and~ and ~or~ as derived expressions.
+
+* Answer
+*** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Special form:
+
+#+begin_src scheme
+  (define (install-and-or-package)
+    (put 'eval 'and
+         (lambda (exp env)
+           (logical-iter false? (logical-clauses exp) env)))
+    (put 'eval 'or
+         (lambda (exp env)
+           (logical-iter true? (logical-clauses exp) env)))
+    'ok)
+
+  (define (logical-clauses exp)
+    (cdr exp))
+
+  (define (logical-iter pred exps env)
+    (let iter ((exps exps))
+      (let ((val (eval (car exps) env))
+            (rest (cdr exps)))
+        (if (or (pred val)
+                (null? rest)) val
+                (iter rest env)))))
+#+end_src
+
+Derived expression:
+
+#+begin_src scheme :tangle 4.4.mceval.eval.and-or.scm
+  (define (install-and-or-package)
+    (put 'eval 'and
+         (lambda (exp env) (eval (and->if exp) env)))
+    (put 'eval 'or
+         (lambda (exp env) (eval (or->if exp) env)))
+    'ok)
+
+  (define (logical-clauses exp)
+    (cdr exp))
+
+  (define (expand-clauses-and clauses)
+    (let ((first (car clauses))
+          (rest (cdr clauses)))
+      (make-if first
+               (if (null? rest)
+                   first
+                   (expand-clauses-and rest))
+               'false)))
+
+  (define (expand-clauses-or clauses)
+    (let ((first (car clauses))
+          (rest (cdr clauses)))
+      (make-if first
+               first
+               (if (null? rest)
+                   'false
+                   (expand-clauses-or rest)))))
+
+  (define (and->if exp)
+    (expand-clauses-and (logical-clauses exp)))
+
+  (define (or->if exp)
+    (expand-clauses-or (logical-clauses exp)))
+
+  (define (make-and clauses)
+    (cons 'and clauses))
+
+  (define (make-or clauses)
+    (cons 'or clauses))
+#+end_src
+
+We install the derived expression for simplicity:
+
+#+begin_src scheme :tangle 4.4.mceval.scm
+  ;; Inherit
+  (load "4.3.mceval.scm")
+  ;; Expression types
+  (load "4.4.mceval.eval.and-or.scm")
+  ;; Setup
+  (install-and-or-package)
+#+end_src
+
+*** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.4.mceval.scm")
+  ;; Test
+  (mc-test '(and false true) false)
+  (mc-test '(or false true) true)
+#+end_src
+
+#+RESULTS:
+: ok

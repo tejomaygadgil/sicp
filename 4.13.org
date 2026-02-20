@@ -1,0 +1,59 @@
+* Question
+Scheme allows us to create new bindings for variables by means of ~define~, but provides no way to get rid of bindings. Implement for the evaluator a special form ~make-unbound!~ that removes the binding of a given symbol from the environment in which the ~make-unbound!~ expression is evaluated. This problem is not completely specified. For example, should we remove only the binding in the first frame of the environment? Complete the specification and justify any choices you make.
+
+* Answer
+** Implementation
+We remove a binding by replacing it with a null pair. (Removing the binding entirely is inconvenient in the present implementation.)
+
+We choose to protect parent environments by restricting ~make-unbound!~ to the local frame.
+
+#+begin_src scheme :tangle 4.13.mceval.apply.frame.scm
+  (define (remove-binding-from-frame! var frame)
+    (set-car! frame (make-binding nil nil))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.13.mceval.apply.env.scm
+  (define (make-unbound! var env)
+    (remove-binding-from-frame!
+     var (scan-bindings var (first-frame env))))
+#+end_src
+
+#+begin_src scheme :tangle 4.13.mceval.eval.make-unbound.scm
+  (define (install-make-unbound-package)
+    (put 'eval 'make-unbound!
+         (lambda (exp env)
+           (make-unbound! (make-unbound-variable exp)
+                          env)
+           'ok))
+    'ok)
+
+  (define (make-unbound-variable exp)
+    (cadr exp))
+#+end_src
+
+#+begin_src scheme :tangle 4.13.mceval.scm
+  ;; Inherit
+  (load "4.12.mceval.scm")
+  ;; Expression types
+  (load "4.13.mceval.eval.make-unbound.scm")
+  ;; Application types
+  (load "4.13.mceval.apply.frame.scm")
+  (load "4.13.mceval.apply.env.scm")
+  ;; Setup
+  (define the-global-environment (setup-environment))
+  (install-make-unbound-package)
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.13.mceval.scm")
+  ;; Test
+  (mc-eval '(begin (define x 1)
+                   (make-unbound! x)
+                   x))
+#+end_src
+
+#+RESULTS:
+: Unbound variable x

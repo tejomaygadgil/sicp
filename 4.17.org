@@ -1,0 +1,193 @@
+* Question
+Draw diagrams of the environment in effect when evaluating the expression ~<e3>~ in the procedure in the text, comparing how this will be structured when definitions are interpreted sequentially with how it will be structured if definitions are scanned out as described. Why is there an extra frame in the transformed program? Explain why this difference in environment structure can never make a difference in the behavior of a correct program. Design a way to make the interpreter implement the "simultaneous" scope rule for internal definitions without constructing the extra frame.
+
+* Answer
+** Diagram
+The sequential interpretation produces two frames, while the scanned-out interpretation produces three frames.
+
+The extra frame comes from the ~let~ clause transformation. "Correct" programs always place definitions at the front, so the two approaches will always be computationally equivalent.
+
+#+begin_src dot
+  digraph {
+    rankdir=RL
+
+    subgraph {
+      node[shape=record]
+      f0 [label="<t>the-global-environment|..."]
+      f1 [label="<t>frame-1|\<vars\>|u: \<e1\>|v: \<e2\>|\<e3\>"]
+    }
+
+    subgraph {
+      node[label="" shape=doublecircle width=0.2]
+      subgraph {
+        rank=same
+        p1
+        subgraph {
+          node[shape=plaintext fontname="Courier New" fontsize=10]
+          p1_def[label="(lambda <vars>\l  (define u <e1>)\l  (define v <e2>)\l<e3>)"]
+        }
+      }
+    }
+
+    f1 -> f0
+
+    p1 -> f0:t
+    p1 -> f1:t [style=dashed]
+    p1 -> p1_def
+  }
+#+end_src
+
+#+begin_src dot
+  digraph {
+    rankdir=RL
+
+    subgraph {
+      node[shape=record]
+      f0 [label="<t>the-global-environment|..."]
+      f1 [label="<t>frame-1|\<vars\>"]
+      f2 [label="<t>frame-2|u: \<e1\>|v: \<e2\>"]
+    }
+
+    subgraph {
+      node[label="" shape=doublecircle width=0.2]
+      subgraph {
+        rank=same
+        p1
+        subgraph {
+          node[shape=plaintext fontname="Courier New" fontsize=10]
+          p1_def[label="(lambda <vars>\l  (let ((u '*unassigned*)\l        (v '*unassigned*))\l    (set! u <e1>)\l    (set! v <e2>)\l    <e3>))"]
+        }
+      }
+      subgraph {
+        rank=same
+        p2
+        subgraph {
+          node[shape=plaintext fontname="Courier New" fontsize=10]
+          p2_def[label="(lambda (u v)\l  (set! u <e1>)\l  (set! v <e2>)\l          <\e3\>)"]
+        }
+      }
+    }
+
+    f1 -> f0
+    f2 -> f1
+
+    p1 -> f0:t
+    p1 -> f1:t [style=dashed]
+    p1 -> p1_def
+
+    p2 -> f1:t
+    p2 -> f2:t [style=dashed]
+    p2 -> p2_def
+  }
+#+end_src
+
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+We can remove the extra frame by simply moving definitions to the front of the procedure body instead of introducing a ~let~ clause. (This also prevents recursive loops from forming.)
+
+#+begin_src scheme :tangle 4.17.mceval.apply.compound.scm
+  (define (scan-out-defines body)
+    (let* ((def?
+             (lambda (exp)
+               (tagged-list? exp 'define)))
+           (make-exp
+            (lambda (defs rest)
+              (append (map (lambda (x)
+                             (make-definition (definition-variable x)
+                                              '(quote *unassigned*)))
+                           defs)
+                      (map (lambda (x)
+                             (make-assignment (definition-variable x)
+                                              (definition-value x)))
+                           defs)
+                      rest))))
+      (let loop ((exps body)
+                 (next (lambda (defs rest)
+                         (if (null? defs) rest
+                             (make-exp defs rest)))))
+        (if (null? exps) (next '() '())
+            (let ((exp (car exps)))
+              (loop (cdr exps)
+                    (lambda (defs rest)
+                      (if (def? exp)
+                          (next (cons exp defs) rest)
+                          (next defs (cons exp rest))))))))))
+
+  (define (make-procedure parameters body env)
+    (list 'procedure parameters (scan-out-defines body) env))
+#+end_src
+
+#+begin_src scheme :tangle 4.17.mceval.scm
+  ;; Inherit
+  (load "4.16.mceval.scm")
+  ;; Application types
+  (load "4.17.mceval.apply.compound.scm")
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.17.mceval.scm")
+  ;; Test
+  (set! mc-mess true)
+  (mc-eval '(let ()
+              (define x 1)
+              (define y 2)
+              (+ x y)))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Evaluating
+(let ()
+  (define x
+    1)
+  (define y
+    2)
+  (+ x y))
+
+Evaluating
+((lambda () (define x 1) (define y 2) (+ x y)))
+
+Evaluating
+(lambda ()
+  (define x
+    1)
+  (define y
+    2)
+  (+ x y))
+
+Applying
+(compound-procedure () ((define x (quote *unassigned*)) (define y (quote *unassigned*)) (set! x 1) (set! y 2) (+ x y)) <procedure-env>)
+on
+
+Evaluating
+(define x
+  '*unassigned*)
+
+Evaluating
+'*unassigned*
+
+Evaluating
+(define y
+  '*unassigned*)
+
+Evaluating
+'*unassigned*
+
+Evaluating
+(set! x 1)
+
+Evaluating
+(set! y 2)
+
+Evaluating
+(+ x y)
+
+Applying
+(primitive #[arity-dispatched-procedure 1])
+on 1 2
+
+#+end_example

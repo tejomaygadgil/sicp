@@ -1,0 +1,18 @@
+(define (install-letrec-package)
+  (put 'eval 'letrec
+       (lambda (exp env)
+         (eval (letrec->let exp) env)))
+  'ok)
+
+(define (letrec->let exp)
+  (let* ((defs (map (lambda (x) (list x '(quote *unassigned*)))
+                    (let-args exp)))
+         (assignments (let loop ((args (let-args exp))
+                                 (vals (let-vals exp)))
+                        (if (null? args) '()
+                            (cons (make-assignment (car args)
+                                                   (car vals))
+                                  (loop (cdr args)
+                                        (cdr vals))))))
+         (body (append assignments (let-body exp))))
+    (make-let defs body)))

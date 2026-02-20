@@ -1,0 +1,31 @@
+* Question
+Design and carry out some experiments to compare the speed of the original metacircular evaluator with the version in this section. Use your results to estimate the fraction of time that is spent in analysis versus execution for various procedures.
+
+* Answer
+#+begin_src scheme :exports both
+  (load "4.12.mceval.scm")
+  (elapsed
+   (lambda ()
+     (mc-eval
+      '(let test-if ((i 1e4))
+         (if (= 0 i) 'ok
+             (test-if (- i 1)))))))
+#+end_src
+
+#+RESULTS:
+: 5.7
+
+#+begin_src scheme :exports both
+  (load "4.22.analyzingmceval.scm")
+  (elapsed
+   (lambda ()
+     (mc-eval
+      '(let test-if ((i 1e4))
+         (if (= 0 i) 'ok
+             (test-if (- i 1)))))))
+#+end_src
+
+#+RESULTS:
+: 1.38
+
+At 10,000 iterations, the analyzing interpretor is 4x faster than the original metacircular evaluator at looping through a trial ~if~ clause.

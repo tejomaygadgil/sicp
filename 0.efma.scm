@@ -1,6 +1,3 @@
-;;;; SICP 2.2.3
-(define nil '())
-
 (define (enumerate-interval low high)
   (if (> low high)
       nil
@@ -11,15 +8,15 @@
         (else (append (enumerate-tree (car tree))
                       (enumerate-tree (cdr tree))))))
 
-(define (filter predicate sequence)
-  (cond ((null? sequence)
-         nil)
-        ((predicate (car sequence))
-         (cons (car sequence)
-               (filter predicate
-                       (cdr sequence))))
-        (else (filter predicate
-                      (cdr sequence)))))
+;; (define (filter predicate sequence)
+;;   (cond ((null? sequence)
+;;          nil)
+;;         ((predicate (car sequence))
+;;          (cons (car sequence)
+;;                (filter predicate
+;;                        (cdr sequence))))
+;;         (else (filter predicate
+;;                       (cdr sequence)))))
 
 ;; (define (map p sequence)
 ;;   (accumulate (lambda (x y) (cons (p x) y))
@@ -32,7 +29,6 @@
   (if (null? sequence) initial
       (op (car sequence) ; next: previous element
           (accumulate op initial (cdr sequence))))) ; prev: next element
-
 
 (define (flatmap proc seq)
   (accumulate append

@@ -1,0 +1,21 @@
+(define (install-begin-package)
+  (put 'eval 'begin
+       (lambda (exp)
+         (analyze-sequence (begin-actions exp))))
+  'ok)
+
+(define (analyze-sequence exps)
+  (define (sequentially proc1 proc2)
+    (lambda (env)
+      (proc1 env)
+      (proc2 env)))
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+        first-proc
+        (loop (sequentially first-proc ;; (!)
+                            (car rest-procs))
+              (cdr rest-procs))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+        (error "Empty sequence -- ANALYZE-SEQUENCE")
+        (loop (car procs) (cdr procs)))))

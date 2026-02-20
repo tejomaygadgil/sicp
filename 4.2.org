@@ -1,0 +1,72 @@
+* Question
+Louis Reasoner plans to reorder the ~cond~ clauses in ~eval~ so that the clause for procedure applications appears before the clause for assignments. He argues that this will make the interpreter more efficient: Since programs usually contain more applications than assignments, definitions, and so on, his modified ~eval~ will usually check fewer clauses than the original ~eval~ before identifying the type of an expression.
+
+a. What is wrong with Louis's plan? (Hint: What will Louis's evaluator do with the expression ~(define x 3)~?)
+
+b. Louis is upset that his plan didn't work. He is willing to go to any lengths to make his evaluator recognize procedure applications before it checks for most other kinds of expressions. Help him by changing the syntax of the evaluated language so that procedure applications start with ~call~. For example, instead of ~(factorial 3)~ we will now have to write ~(call factorial 3)~ and instead of ~(+ 1 2)~ we will have to write ~(call + 1 2)~.
+
+* Answer
+** a.
+Louis's plan fails because application has no special syntax of its own. Swapping application with special forms in ~eval~ will cause all expressions to be interpreted as an application.
+
+** b.
+*** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.2.mceval.eval.application.scm
+  (define (application? exp)
+    (tagged-list? exp 'call))
+  (define (operator exp) (cadr exp))
+  (define (operands exp) (cddr exp))
+#+end_src
+
+#+begin_src scheme :tangle 4.2.mceval.eval.scm
+  (define (eval exp env)
+    (cond ((application? exp) ;; Moved to top
+           (apply (eval (operator exp) env)
+                  (list-of-values (operands exp) env)))
+          ((self-evaluating? exp) exp)
+          ((variable? exp) (lookup-variable-value exp env))
+          ((quoted? exp) (text-of-quotation exp))
+          ((assignment? exp) (eval-assignment exp env))
+          ((definition? exp) (eval-definition exp env))
+          ((if? exp) (eval-if exp env))
+          ((lambda? exp)
+           (make-procedure (lambda-parameters exp)
+                           (lambda-body exp)
+                           env))
+          ((begin? exp)
+           (eval-sequence (begin-actions exp) env))
+          ((cond? exp) (eval (cond->if exp) env))
+          (else
+           (error "Unknown expression type -- EVAL" exp))))
+
+  (define (tagged-list? exp tag)
+    (if (pair? exp)
+        (eq? (car exp) tag)
+        false))
+#+end_src
+
+#+begin_src scheme :tangle 4.2.mceval.scm
+  ;; Load mceval
+  (load "4.mceval.scm")
+  ;; Update application
+  (load "4.2.mceval.eval.scm")
+  (load "4.2.mceval.eval.application.scm")
+  #+end_src
+
+*** Test
+:PROPERTIES:
+:header-args:scheme: :exports both
+:END:
+#+begin_src scheme :results output
+  (load "4.2.mceval.scm")
+  ;; Test
+  (mc-print '((+ 1 1) ;; Fails
+              (call + 1 1)))
+#+end_src
+
+#+RESULTS:
+: Unknown expression type -- EVAL (+ 1 1)
+: 2

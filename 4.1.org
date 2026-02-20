@@ -1,0 +1,47 @@
+* Question
+Notice that we cannot tell whether the metacircular evaluator evaluates operands from left to right or from right to left. Its evaluation order is inherited from the underlying Lisp: If the arguments to ~cons~ in list-of-values are evaluated from left to right, then ~list-of-values~ will evaluate operands from left to right; and if the arguments to ~cons~ are evaluated from right to left, then ~list-of-values~ will evaluate operands from right to left.
+
+Write a version of ~list-of-values~ that evaluates operands from left to right regardless of the order of evaluation in the underlying Lisp. Also write a version of ~list-of-values~ that evaluates operands from right to left.
+
+* Answer
+:PROPERTIES:
+:header-args:scheme: :session *sicp* :results output
+:END:
+#+begin_src scheme :results none
+  (define (eval exp env) (display (format false "~a " exp)))
+  (define no-operand? null?)
+  (define (first-operand exps) (car exps))
+  (define (rest-operands exps) (cdr exps))
+#+end_src
+
+We can control the order of evaluation with ~let~ clauses.
+
+Left-to-right:
+
+#+begin_src scheme :results output :exports both
+  (define (list-of-values exps env)
+    (if (no-operand? exps) '()
+        (let ((left (eval (first-operand exps) env)))
+          (let ((right (list-of-values (rest-operands exps) env)))
+            (cons left right)))))
+
+  (list-of-values '(1 2 3 4) 'env)
+#+end_src
+
+#+RESULTS:
+: 1 2 3 4
+
+Right-to-left:
+
+#+begin_src scheme :results output :exports both
+  (define (list-of-values exps env)
+    (if (no-operand? exps) '()
+        (let ((right (list-of-values (rest-operands exps) env)))
+          (let ((left (eval (first-operand exps) env)))
+            (cons left right)))))
+
+  (list-of-values '(1 2 3 4) 'env)
+#+end_src
+
+#+RESULTS:
+: 4 3 2 1

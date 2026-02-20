@@ -1,0 +1,77 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+~Let~ expressions are derived expressions, because
+
+#+begin_src scheme
+  (let ((<var1> <exp1>) ... (<varn> <expn>))
+    <body>)
+#+end_src
+
+is equivalent to
+
+#+begin_src scheme
+  ((lambda (<var1> ... <varn>)
+     <body>)
+   <exp1>
+   <expn>)
+#+end_src
+
+Implement a syntactic transformation ~let->combination~ that reduces evaluating ~let~ expressions to evaluating combinations of the type shown above, and add the appropriate clause to ~eval~ to handle ~let~ expressions.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.6.mceval.eval.let.scm
+  (define (install-let-package)
+    (put 'eval 'let
+         (lambda (exp env)
+           (eval (let->combination exp) env)))
+    'ok)
+
+  (define (let-defs exp)
+    (cadr exp))
+
+  (define (let-body exp)
+    (cddr exp))
+
+  (define (let-args exp)
+    (map car (let-defs exp)))
+
+  (define (let-vals exp)
+    (map cadr (let-defs exp)))
+
+  (define (let->combination exp)
+    (cons (make-lambda (let-args exp)
+                       (let-body exp))
+          (let-vals exp)))
+
+  (define (make-let defs body)
+    (cons 'let (cons defs body)))
+#+end_src
+
+#+begin_src scheme :tangle 4.6.mceval.scm
+  ;; Inherit
+  (load "4.5.mceval.scm")
+  ;; Expression types
+  (load "4.6.mceval.eval.let.scm")
+  ;; Setup
+  (install-let-package)
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.6.mceval.scm")
+  ;; Test
+  (mc-test '(let ((x 1)
+                  (y 2))
+              (+ x y))
+           3)
+#+end_src
+
+#+RESULTS:
+: ok

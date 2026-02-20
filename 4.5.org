@@ -1,0 +1,93 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Scheme allows an additional syntax for ~cond~ clauses, ~(<test> => <recipient>)~. If ~<test>~ evaluates to a true value, then ~<recipient>~ is evaluated. Its value must be a procedure of one argument; this procedure is then invoked on the value of the ~<test>~, and the result is returned as the value of the ~cond~ expression. For example
+
+#+begin_src scheme
+  (cond ((assoc 'b '((a 1) (b 2))) => cadr)
+        (else false))
+#+end_src
+
+returns ~2~. Modify the handling of ~cond~ so that it supports this extended syntax.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+To keep ~cond~ as a derived expression, current implementation evaluates ~cond-predicate~ twice in the event of a match.
+
+#+begin_src scheme :tangle 4.5.mceval.eval.cond.scm
+  (define (install-cond-package)
+    (put 'eval 'cond
+         (lambda (exp env)
+           (eval (cond->if exp) env)))
+    'ok)
+
+  ;; =>
+  (define (cond-=>? clause)
+    (eq? (cadr clause) '=>))
+
+  (define (cond-=>-proc clause)
+    (caddr clause))
+
+  (define (cond-=>-exp clause)
+    (list (cond-=>-proc clause)
+          (cond-predicate clause)))
+
+  ;; cond
+  (define (cond-clauses exp)
+    (cdr exp))
+
+  (define (cond-else-clause? clause)
+    (eq? (cond-predicate clause) 'else))
+
+  (define (cond-predicate clause)
+    (car clause))
+
+  (define (cond-actions clause)
+    (cdr clause))
+
+  (define (cond->if exp)
+    (expand-clauses (cond-clauses exp)))
+
+  (define (expand-clauses clauses)
+    (if (null? clauses)
+        'false                          ; no else clause
+        (let ((first (car clauses))
+              (rest (cdr clauses)))
+          (if (cond-else-clause? first)
+              (if (null? rest)
+                  (sequence->exp (cond-actions first))
+                  (error "ELSE clause isn't last -- COND->IF"
+                         clauses))
+              (make-if (cond-predicate first)
+                       (if (cond-=>? first)
+                           (cond-=>-exp first)
+                           (sequence->exp (cond-actions first)))
+                       (expand-clauses rest))))))
+
+#+end_src
+
+#+begin_src scheme :tangle 4.5.mceval.scm
+  ;; Inherit
+  (load "4.4.mceval.scm")
+  ;; Expression types
+  (load "4.5.mceval.eval.cond.scm")
+  ;; Setup
+  (install-cond-package)
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.5.mceval.scm")
+  ;; Test
+  (mc-test '(cond ((assoc 'b '((a 1) (b 2))) => cadr)
+                  (else false))
+           2)
+#+end_src
+
+#+RESULTS:
+: ok

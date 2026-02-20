@@ -1,0 +1,70 @@
+* Question
+The procedures ~set-variable-value!~, ~define-variable!~, and ~lookup-variable-value~ can be expressed in terms of more abstract procedures for traversing the environment structure. Define abstractions that capture the common patterns and redefine the three procedures in terms of these abstractions.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+We retain the binding pair representation from Ex 4.11.
+
+#+begin_src scheme :tangle 4.12.mceval.apply.env.scm
+  (define (env-loop var env)
+    (let loop ((env env))
+      (if (eq? env the-empty-environment)
+          (error "Unbound variable" var)
+          (let ((frame (scan-bindings var (first-frame env))))
+            (if frame frame
+                (loop (enclosing-environment env)))))))
+
+  (define (scan-bindings var frame)
+    (cond ((null? frame) false)
+          ((eq? var (var-binding (first-binding frame))) frame)
+          (else (scan-bindings var (rest-bindings frame)))))
+
+  (define (lookup-variable-value var env)
+    (val-binding (first-binding (env-loop var env))))
+
+  (define (set-variable-value! var val env)
+    (set-binding-to-frame! var val (env-loop var env)))
+
+  (define (define-variable! var val env)
+    (let* ((frame (first-frame env))
+           (result (scan-bindings var frame)))
+      (if result
+          (set-binding-to-frame! var val result)
+          (add-binding-to-frame! var val frame))))
+#+end_src
+
+#+begin_src scheme :tangle 4.12.mceval.scm
+  ;; Inherit
+  (load "4.8.mceval.scm")
+  ;; Application types
+  (load "4.11.mceval.apply.frame.scm")
+  (load "4.12.mceval.apply.env.scm")
+  ;; Setup
+  (define the-global-environment (setup-environment))
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.12.mceval.scm")
+  ;; Test
+  (let* ((e1 the-empty-environment)
+         (e2 (extend-environment (list 'x 'y) (list 1 2) e1))
+         (e3 (extend-environment (list 'a 'b) (list 9 8) e2)))
+    (test (lookup-variable-value 'y e2) 2)
+    (define-variable! 'z 3 e2)
+    (define-variable! 'y 4 e2)
+    (test (lookup-variable-value 'z e2) 3)
+    (test (lookup-variable-value 'y e2) 4)
+    (test (lookup-variable-value 'z e3) 3)
+    (test (lookup-variable-value 'y e3) 4)
+    (define-variable! 'z 7 e3)
+    (test (lookup-variable-value 'z e3) 7)
+    (test e3 '(((a . 9) (z . 7) (b . 8) (() . ())) ((x . 1) (z . 3) (y . 4) (() . ())))))
+#+end_src
+
+#+RESULTS:
+: ok

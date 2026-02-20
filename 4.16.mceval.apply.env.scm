@@ -1,0 +1,5 @@
+(define (lookup-variable-value var env)
+  (let ((val (val-binding (first-binding (env-loop var env)))))
+    (if (eq? val '*unassigned*)
+        (error "Unnassigned variable -- LOOKUP-VARIABLE-VALUE" var)
+        val)))

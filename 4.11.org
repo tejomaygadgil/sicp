@@ -1,0 +1,104 @@
+* Question
+Instead of representing a frame as a pair of lists, we can represent a frame as a list of bindings, where each binding is a name-value pair. Rewrite the environment operations to use this alternative representation.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.11.mceval.apply.env.scm
+  (define (lookup-variable-value var env)
+    (let env-loop ((env env))
+      (if (eq? env the-empty-environment)
+          (error "Unbound variable" var)
+          (let scan-bindings ((frame (first-frame env)))
+            (if (null? frame)
+                (env-loop (enclosing-environment env))
+                (let ((binding (first-binding frame)))
+                  (if (eq? var (var-binding binding))
+                      (val-binding binding)
+                      (scan-bindings (rest-bindings frame)))))))))
+
+  (define (set-variable-value! var val env)
+    (let env-loop ((env env))
+      (if (eq? env the-empty-environment)
+          (error "Unbound variable -- SET!" var)
+          (let scan-bindings ((frame (first-frame env)))
+            (cond ((null? frame)
+                   (env-loop (enclosing-environment env)))
+                  ((eq? var (var-binding (first-binding frame)))
+                   (set-binding-to-frame! var val frame))
+                  (else (scan-bindings (rest-bindings frame)))))))
+    'ok)
+
+  (define (define-variable! var val env)
+    (let ((frame (first-frame env)))
+      (let scan-bindings ((curr-frame frame))
+        (cond ((null? curr-frame)
+               (add-binding-to-frame! var val frame))
+              ((eq? var (var-binding (first-binding curr-frame)))
+               (set-binding-to-frame! var val curr-frame))
+              (else (scan-bindings (rest-bindings curr-frame))))))
+    'ok)
+#+end_src
+
+~make-frame~ requires a dummy element for ~add-binding-to-frame!~ to extend empty frames.
+
+#+begin_src scheme :tangle 4.11.mceval.apply.frame.scm
+  (define (make-frame variables values)
+    (if (null? variables) (list (cons '() '())) ;; Dummy element
+        (cons (make-binding (car variables) (car values))
+              (make-frame (cdr variables) (cdr values)))))
+
+  (define (add-binding-to-frame! var val frame)
+    (set-cdr! frame
+              (cons (make-binding var val)
+                    (cdr frame)))
+    'ok)
+
+  (define (set-binding-to-frame! var val frame)
+    (set-car! frame
+              (make-binding var val))
+    'ok)
+
+  (define (first-binding frame)
+    (car frame))
+
+  (define (rest-bindings frame)
+    (cdr frame))
+
+  (define (make-binding var val)
+    (cons var val))
+
+  (define (var-binding binding)
+    (car binding))
+
+  (define (val-binding binding)
+    (cdr binding))
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "0.util.scm")
+  (load "4.mceval.apply.env.scm")
+  (load "4.11.mceval.apply.frame.scm")
+  (load "4.11.mceval.apply.env.scm")
+  ;; Test
+  (let* ((e1 the-empty-environment)
+         (e2 (extend-environment (list 'x 'y) (list 1 2) e1))
+         (e3 (extend-environment (list 'a 'b) (list 9 8) e2)))
+    (test (lookup-variable-value 'y e2) 2)
+    (define-variable! 'z 3 e2)
+    (define-variable! 'y 4 e2)
+    (test (lookup-variable-value 'z e2) 3)
+    (test (lookup-variable-value 'y e2) 4)
+    (test (lookup-variable-value 'z e3) 3)
+    (test (lookup-variable-value 'y e3) 4)
+    (define-variable! 'z 7 e3)
+    (test (lookup-variable-value 'z e3) 7)
+    (test e3 '(((a . 9) (z . 7) (b . 8) (() . ())) ((x . 1) (z . 3) (y . 4) (() . ())))))
+#+end_src
+
+#+RESULTS:
+: ok

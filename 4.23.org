@@ -1,0 +1,47 @@
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+* Question
+Alyssa P. Hacker doesn't understand why ~analyze-sequence~ needs to be so complicated. All the other analysis procedures are straightforward transformations of the corresponding evaluation procedures (or ~eval~ clauses) in section 4.1.1. She expected ~analyze-sequence~ to look like this:
+
+#+begin_src scheme
+(define (analyze-sequence exps)
+  (define (execute-sequence procs env)
+    (cond ((null? (cdr procs)) ((car procs) env))
+          (else ((car procs) env)
+                (execute-sequence (cdr procs) env))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+        (error "Empty sequence -- ANALYZE"))
+    (lambda (env) (execute-sequence procs env))))
+#+end_src
+
+Eva Lu Ator explains to Alyssa that the version in the text does more of the work of evaluating a sequence at analysis time. Alyssa's sequence-execution procedure, rather than having the calls to the individual execution procedures built in, loops through the procedures in order to call them: In effect, although the individual expressions in the sequence have been analyzed, the sequence itself has not been.
+
+Compare the two versions of ~analyze-sequence~. For example, consider the common case (typical of procedure bodies) where the sequence has just one expression. What work will the execution procedure produced by Alyssa's program do? What about the execution procedure produced by the program in the text above? How do the two versions compare for a sequence with two expressions?
+
+* Answer
+#+begin_src scheme
+(define (analyze-sequence exps)
+  (define (sequentially proc1 proc2)
+    (lambda (env) (proc1 env) (proc2 env)))
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+        first-proc
+        (loop (sequentially first-proc
+                            (car rest-procs))
+              (cdr rest-procs))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+        (error "Empty sequence -- ANALYZE-SEQUENCE")
+        (loop (car procs) (cdr procs)))))
+#+end_src
+
+~execute-sequence~ steps through the list of analyzed procedures each time it is called, while ~sequentially~ returns a procedure representing the work of stepping through ~procs~. (In effect, ~sequentially~ produces an analyzed version of ~execute-sequence~!)
+
+~sequentially~ returns an analyzed procedure directly for one expression, and for two or greater it returns a pre-computed procedure weaving all the expressions together. Alyssa's procedure returns a procedure holding a call to ~execute-sequence~ for any number of expressions.
+
+| n | ~execute-sequence~            | ~sequentially~                     |
+|---+-------------------------------+------------------------------------|
+| 1 | ~(execute-sequence '(p1))~    | ~p1~                               |
+| 2 | ~(execute-sequence '(p1 p2))~ | ~(lambda (env) (p1 env) (p2 env))~ |

@@ -1,24 +1,20 @@
+(load-option 'format)
+
+(define nil '())
+
 (define (print . vals)
+  (for-each (lambda (x) (display (format false "~a " x)))
+            vals)
   (newline)
-  (for-each (lambda (x) (display x)
-                        (display " "))
-            vals))
-
-(define (global-eval exp)
-  (eval exp user-initial-environment))
-
-(define (eval-and-print exps)
-  (for-each print
-            (map global-eval
-                 exps)))
-
-(define (test x y)
-  (if (equal? x y) 'ok
-      (error 'ne: x y)))
+  'ok)
 
 (define (catch proc)
     (guard (c (else (condition/report-string c)))
     (proc)))
+
+(define (test x y)
+  (if (equal? x y) 'ok
+      (error 'ne: x y)))
 
 (define (within-delta? actual guess delta)
   (< (abs (- guess actual))

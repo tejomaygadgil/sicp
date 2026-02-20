@@ -1,0 +1,144 @@
+* Question
+In this exercise we implement the method just described for interpreting internal definitions. We assume that the evaluator supports ~let~ (see exercise 4.6).
+
+a. Change ~lookup-variable-value~ (section 4.1.3) to signal an error if the value it finds is the symbol ~*unassigned*~.
+
+b. Write a procedure ~scan-out-defines~ that takes a procedure body and returns an equivalent one that has no internal definitions, by making the transformation described above.
+
+c. Install ~scan-out-defines~ in the interpreter, either in ~make-procedure~ or in ~procedure-body~ (see section 4.1.3). Which place is better? Why?
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+*** a. ~lookup-variable-value~
+#+begin_src scheme :tangle 4.16.mceval.apply.env.scm
+  (define (lookup-variable-value var env)
+    (let ((val (val-binding (first-binding (env-loop var env)))))
+      (if (eq? val '*unassigned*)
+          (error "Unnassigned variable -- LOOKUP-VARIABLE-VALUE" var)
+          val)))
+#+end_src
+
+*** b-c. ~scan-out-defines~
+Creating the internal block is a one-time task, so it is better to do it in ~make-procedure~.
+
+~scan-out-defines~ creates a ~let~ which creates a ~lambda~ which ends up producing a procedure whose body is processed by ~scan-out-defines~ -- therefore, it is important to break the cycle when no ~defs~ are found.
+
+#+begin_src scheme :tangle 4.16.mceval.apply.compound.scm
+  (define (scan-out-defines body)
+    (let* ((def?
+             (lambda (exp)
+               (tagged-list? exp 'define)))
+           (make-exp
+            (lambda (defs rest)
+              (make-let (map (lambda (x)
+                               (list (definition-variable x)
+                                     '(quote *unassigned*)))
+                             defs)
+                        (append (map (lambda (x)
+                                       (make-assignment (definition-variable x)
+                                                        (definition-value x)))
+                                     defs)
+                                rest)))))
+      (let loop ((exps body)
+                 (next (lambda (defs rest)
+                         (if (null? defs) rest ;; Stop recursing
+                             (list (make-exp defs rest))))))
+        (if (null? exps) (next '() '())
+            (let ((exp (car exps)))
+              (loop (cdr exps)
+                    (lambda (defs rest)
+                      (if (def? exp)
+                          (next (cons exp defs) rest)
+                          (next defs (cons exp rest))))))))))
+
+  (define (make-procedure parameters body env)
+    (list 'procedure parameters (scan-out-defines body) env))
+#+end_src
+
+#+begin_src scheme :tangle 4.16.mceval.scm
+  ;; Inherit
+  (load "4.12.mceval.scm")
+  ;; Application types
+  (load "4.16.mceval.apply.env.scm")
+  (load "4.16.mceval.apply.compound.scm")
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.16.mceval.scm")
+  ;; Test
+  (set! mc-mess true)
+  (mc-eval '(let ()
+              (define x 1)
+              (define y 2)
+              (+ x y)))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Evaluating
+(let ()
+  (define x
+    1)
+  (define y
+    2)
+  (+ x y))
+
+Evaluating
+((lambda () (define x 1) (define y 2) (+ x y)))
+
+Evaluating
+(lambda ()
+  (define x
+    1)
+  (define y
+    2)
+  (+ x y))
+
+Applying
+(compound-procedure () ((let ((x (quote *unassigned*)) (y (quote *unassigned*))) (set! x 1) (set! y 2) (+ x y))) <procedure-env>)
+on
+
+Evaluating
+(let ((x '*unassigned*) (y '*unassigned*))
+  (set! x 1)
+  (set! y 2)
+  (+ x y))
+
+Evaluating
+((lambda (x y) (set! x 1) (set! y 2) (+ x y)) '*unassigned* '*unassigned*)
+
+Evaluating
+'*unassigned*
+
+Evaluating
+'*unassigned*
+
+Evaluating
+(lambda (x y)
+  (set! x 1)
+  (set! y 2)
+  (+ x y))
+
+Applying
+(compound-procedure (x y) ((set! x 1) (set! y 2) (+ x y)) <procedure-env>)
+on *unassigned* *unassigned*
+
+Evaluating
+(set! x 1)
+
+Evaluating
+(set! y 2)
+
+Evaluating
+(+ x y)
+
+Applying
+(primitive #[arity-dispatched-procedure 1])
+on 1 2
+
+#+end_example

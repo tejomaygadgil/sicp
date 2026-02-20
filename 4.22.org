@@ -1,0 +1,42 @@
+* Question
+Extend the evaluator in this section to support the special form `let`. (See exercise 4.6.)
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.22.analyzingmceval.eval.let.scm
+  (define (install-let-package)
+    (put 'eval 'let
+         (lambda (exp)
+           (analyze (let->combination exp))))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.22.analyzingmceval.scm
+  ;; Inherit
+  (load "4.analyzingmceval.scm")
+  ;; Expression types
+  (load "4.22.analyzingmceval.eval.let.scm")
+  ;; Setup
+  (install-let-package)
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.22.analyzingmceval.scm")
+  ;; Test
+  (mc-test '(let ((x 1))
+              (+ x 1))
+           2)
+  (mc-test '(let f ((x 10))
+              (if (= x 1) x
+                  (* (f (- x 1))
+                     x)))
+           3628800)
+#+end_src
+
+#+RESULTS:
+: ok
