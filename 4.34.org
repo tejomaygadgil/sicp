@@ -1,0 +1,143 @@
+* Question
+Modify the driver loop for the evaluator so that lazy pairs and lists will print in some reasonable way. (What are you going to do about infinite lists?) You may also need to modify the representation of lazy pairs so that the evaluator can identify them in order to print them.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Tagging all ~cons~'s as a 'lazy-pair allows ~cons~ to be represented as a pair in the underlying evaluator where the ~car~ is the 'lazy-pair element, and the ~cdr~ is the procedure. As ~car~ and ~cdr~ are the only means of accessing the data in ~cons~ modifying them is sufficient.
+
+#+begin_src scheme :tangle 4.34.leval.eval.cons.scm
+  (define (install-cons)
+    (for-each mc-eval
+              '((define (cons x y)
+                  (lambda (m) (m lazy-pair x y)))
+                (define (car z)
+                  (z (lambda (tag p q) p)))
+                (define (cdr z)
+                  (z (lambda (tag p q) q)))
+                (define ones (cons 1 ones))
+                (define integers (cons 1
+                                       (add-lists ones
+                                                  integers)))
+                (define fibs (cons 0
+                                   (cons 1
+                                         (add-lists (cdr fibs)
+                                                    fibs))))))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.34.leval.driver.scm
+  (define (driver-loop)
+    (prompt-for-input input-prompt)
+    (let ((input (read)))
+      (if (eq? input 'stop) 'ok
+          (let ((output
+                 (actual-value input the-global-environment)))
+            (announce-output output-prompt)
+            (user-print output the-empty-history))) ;; Changed
+      (driver-loop)))
+
+  (define (user-print object history)
+    (if (compound-procedure? object)
+        (if (lazy-pair? object) ;; Changed
+            (lazy-display object history)
+            (display (list 'compound-procedure
+                           (procedure-parameters object)
+                           (procedure-body object)
+                           '<procedure-env>)))
+        (display object)))
+
+  (define (lazy-display pair history)
+    (let ((lazy-print
+           (lambda (element history) ;; Stop if
+             (if (thunk? element)
+                 (display "...") ;; (1) Thunk
+                 (if (in-history? element history)
+                     (display "...") ;; (2) Previous element
+                     (user-print (thunk-value element) ;; Otherwise recurse
+                                 (cons element history))))))
+          (head
+           (lookup-variable-value
+            (caddar (procedure-body pair))
+            (procedure-environment pair)))
+          (tail
+           (lookup-variable-value
+            (car (cdddar (procedure-body pair)))
+            (procedure-environment pair))))
+      (display "{")
+      (lazy-print head history)
+      (display " ")
+      (lazy-print tail history)
+      (display "}")))
+
+  (define (lazy-pair? proc)
+    (let ((body (procedure-body proc)))
+      (if (null? (cdar body)) false
+          (eq? (cadar body) 'lazy-pair))))
+
+  (define the-empty-history '())
+
+  (define (in-history? element history)
+    (if (null? history) false
+        (if (equal? element (car history)) true
+            (in-history? element (cdr history)))))
+#+end_src
+
+#+begin_src scheme :tangle 4.34.leval.util.scm
+  (define (mc-print exps)
+    (for-each (lambda (x)
+                (user-print x the-empty-history) ;; Changed
+                (newline))
+              (map mc-eval
+                   exps))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.34.leval.scm
+  ;; Inherit
+  (load "4.33.leval.scm")
+  ;; Expression types
+  (load "4.34.leval.eval.cons.scm")
+  ;; Driver
+  (load "4.34.leval.driver.scm")
+  (load "4.34.leval.util.scm")
+  ;; Setup
+  (install-cons)
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.34.leval.scm")
+  ;; Test
+  (map (lambda (x)
+         (print x)
+         (mc-print (list x))
+         (mc-eval `(car ,x))
+         (mc-print (list x))
+         (mc-eval `(list-ref ,x 10))
+         (mc-print (list x))
+         (newline))
+       '(ones integers fibs))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+ones
+{... ...}
+{1 ...}
+{1 {1 ...}}
+
+integers
+{... ...}
+{1 ...}
+{1 {2 {3 {4 {5 {6 {7 {8 {9 {10 {11 ...}}}}}}}}}}}
+
+fibs
+{... ...}
+{0 ...}
+{0 {1 {1 {2 {3 {5 {8 {13 {21 {34 {55 ...}}}}}}}}}}}
+
+#+end_example

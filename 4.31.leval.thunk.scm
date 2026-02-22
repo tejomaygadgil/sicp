@@ -1,0 +1,27 @@
+(define (delay-it par exp env)
+  (let ((par-type (parameter-type par)))
+    (cond ((eq? par-type 'eager)
+           (actual-value exp env))
+          ((eq? par-type 'lazy)
+           (list 'thunk-naive exp env))
+          ((eq? par-type 'lazy-memo)
+           (list 'thunk exp env))
+          (else
+           (error "Unknown parameter type -- DELAY-IT" par-type)))))
+
+(define (force-it obj)
+  (cond ((naive-thunk? obj) ;; Changed
+         (actual-value (thunk-exp obj) (thunk-env obj)))
+        ((thunk? obj)
+         (let ((result (actual-value (thunk-exp obj)
+                                     (thunk-env obj))))
+           (set-car! obj 'evaluated-thunk)
+           (set-car! (cdr obj) result)
+           (set-cdr! (cdr obj) '())
+           result))
+        ((evaluated-thunk? obj)
+         (thunk-value obj))
+        (else obj)))
+
+(define (naive-thunk? obj)
+  (tagged-list? obj 'thunk-naive))

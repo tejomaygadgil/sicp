@@ -1,0 +1,27 @@
+* Question
+~Eval~ uses ~actual-value~ rather than ~eval~ to evaluate the operator before passing it to ~apply~, in order to force the value of the operator. Give an example that demonstrates the need for this forcing.
+
+* Answer
+Without forcing the operator value, procedure body and parameters are not available to ~apply~.
+
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.leval.scm")
+  (define (eval exp env)
+    ((or (get 'eval
+              (cond ((self-evaluating? exp) 'self-evaluating)
+                    ((variable? exp) 'variable)
+                    (else (operator exp))))
+         (if (application? exp)
+             (lambda (exp env)
+               (let ((procedure (operator exp)) ;; Changed
+                     (arguments (operands exp)))
+                 (apply procedure arguments env)))
+             (error "Unknown expression -- EVAL" exp)))
+     exp env))
+  ;; Test
+  (mc-eval '(+ 1 1))
+#+end_src
+
+#+RESULTS:
+: Unknown procedure type -- APPLY +

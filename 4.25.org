@@ -1,0 +1,21 @@
+* Question
+:PROPERTIES:
+:header-args:scheme :eval no
+:END:
+Suppose that (in ordinary applicative-order Scheme) we define ~unless~ as shown above and then define factorial in terms of ~unless~ as
+
+#+begin_src scheme
+  (define (unless condition usual-value exceptional-value)
+    (if condition exceptional-value usual-value))
+  (define (factorial n)
+    (unless (= n 1)
+      (* n (factorial (- n 1)))
+      1))
+#+end_src
+
+What happens if we attempt to evaluate ~(factorial 5)~? Will our definitions work in a normal-order language?
+
+* Answer
+Applicative-order ~factorial~ will infinitely recurse on evaluates the arguments to ~unless~ (which lead back toward ~factorial~).
+
+Normal-order ~factorial~ works because arguments are not evaluated until they are needed.

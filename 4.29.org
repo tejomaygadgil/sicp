@@ -1,0 +1,65 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Exhibit a program that you would expect to run much more slowly without memoization than with memoization. Also, consider the following interaction, where the ~id~ procedure is defined as in exercise 4.27 and count starts at 0:
+
+#+begin_src scheme
+  (define (square x)
+    (* x x))
+
+  ;;; L-Eval input:
+  (square (id 10))
+  ;;; L-Eval value:
+  <response>
+
+  ;;; L-Eval input:
+  count
+  ;;; L-Eval value:
+  <response>
+#+end_src
+
+Give the responses both when the evaluator memoizes and when it does not.
+
+* Answer
+Any program that re-uses old values will execute faster with memoization, such as ~fib~.
+
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.leval.scm")
+  ;; Test
+  (mc-eval '(begin
+              (define count 0)
+              (define (id x)
+                (set! count (+ count 1))
+                x)
+              (define (square x)
+                (* x x))
+              (square (id 10))
+              count))
+#+end_src
+
+#+RESULTS:
+: 1
+
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.leval.scm")
+  (define (force-it obj)
+    (if (thunk? obj)
+        (actual-value (thunk-exp obj) (thunk-env obj))
+        obj))
+  ;; Test
+  (mc-eval '(begin
+              (define count 0)
+              (define (id x)
+                (set! count (+ count 1))
+                x)
+              (define (square x)
+                (* x x))
+              (square (id 10))
+              count))
+#+end_src
+
+#+RESULTS:
+: 2

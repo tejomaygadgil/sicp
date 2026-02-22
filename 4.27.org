@@ -1,0 +1,37 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Suppose we type in the following definitions to the lazy evaluator:
+
+#+begin_src scheme
+  (define count 0)
+  (define (id x)
+    (set! count (+ count 1))
+    x)
+#+end_src
+
+Give the missing values in the following sequence of interactions, and explain your answers.
+
+#+begin_src scheme
+  (define w (id (id 10)))
+  ;;; L-Eval input:
+  count
+  ;;; L-Eval value:
+  <response>
+  ;;; L-Eval input:
+  w
+  ;;; L-Eval value:
+  <response>
+  ;;; L-Eval input:
+  count
+  ;;; L-Eval value:
+  <response>
+#+end_src
+
+* Answer
+| Expression | Value | Explanation                                      |
+|------------+-------+--------------------------------------------------|
+| ~count~    | ~1~   | ~id~ is applied to ~(id 10)~, returning a thunk. |
+| ~w~        | ~10~  | ~(id 10)~ is forced, also setting ~count~ to 2.  |
+| ~count~    | ~2~   | Both ~id~s have been evaluated.                  |

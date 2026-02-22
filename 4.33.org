@@ -1,0 +1,89 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Ben Bitdiddle tests the lazy list implementation given above by evaluating the expression
+
+#+begin_src scheme
+(car '(a b c))
+#+end_src
+
+To his surprise, this produces an error. After some thought, he realizes that the "lists" obtained by reading in quoted expressions are different from the lists manipulated by the new definitions of ~cons~, ~car~, and ~cdr~. Modify the evaluator's treatment of quoted expressions so that quoted lists typed at the driver loop will produce true lazy lists.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+We modify ~text-of-quotation~ to convert quoted text into nested ~cons~'s.
+
+#+begin_src scheme :tangle 4.33.leval.eval.cons.scm
+  (define (install-cons)
+    (for-each mc-eval
+              '((define (cons x y)
+                  (lambda (m) (m x y)))
+                (define (car z)
+                  (z (lambda (p q) p)))
+                (define (cdr z)
+                  (z (lambda (p q) q)))
+                (define (scale-list items factor)
+                  (map (lambda (x) (* x factor))
+                       items))
+                (define (add-lists list1 list2)
+                  (cond ((null? list1) list2)
+                        ((null? list2) list1)
+                        (else (cons (+ (car list1) (car list2))
+                                    (add-lists (cdr list1) (cdr list2))))))
+                (define ones (cons 1 ones))
+                (define integers (cons 1
+                                       (add-lists ones
+                                                  integers)))
+                (define fibs (cons 0
+                                   (cons 1
+                                         (add-lists (cdr fibs)
+                                                    fibs))))))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.33.leval.eval.quoted.scm
+  (define (install-quotation-package)
+    (put 'eval 'quote
+         (lambda (exp env)
+           (text-of-quotation exp env)))
+    'ok)
+
+  (define (text-of-quotation exp env)
+    (let ((text (cadr exp)))
+      (if (pair? text)
+          (eval (quote->cons text) env)
+          text)))
+
+  (define (quote->cons exp)
+    (let iter ((exp exp))
+      (if (null? exp) '()
+          (list 'cons (list 'quote (car exp))
+                (iter (cdr exp))))))
+#+end_src
+
+#+begin_src scheme :tangle 4.33.leval.scm
+  ;; Inherit
+  (load "4.leval.scm")
+  ;; Expression types
+  (load "4.33.leval.eval.quoted.scm")
+  (load "4.33.leval.eval.cons.scm")
+  ;; Setup
+  (install-quotation-package)
+  (install-cons)
+#+end_src
+
+** Test
+#+begin_src scheme :exports both
+  ;; Load
+  (load "4.33.leval.scm")
+  ;; Test
+  (mc-test (quote (car '(a b c)))
+           'a)
+#+end_src
+
+#+RESULTS:
+: ok
