@@ -1,0 +1,42 @@
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+* Question
+Louis Reasoner suggests that, since a verb phrase is either a verb or a verb phrase followed by a prepositional phrase, it would be much more straightforward to define the procedure ~parse-verb-phrase~ as follows (and similarly for noun phrases):
+
+#+begin_src scheme
+(define (parse-verb-phrase)
+  (amb (parse-word verbs)
+       (list 'verb-phrase
+             (parse-verb-phrase)
+             (parse-prepositional-phrase))))
+#+end_src
+
+Does this work? Does the program's behavior change if we interchange the order of expressions in the ~amb~?
+
+* Answer
+Louis's approach will get stuck in a loop after exhausting all valid options.
+
+~(parse-verb-phrase)~, which always succeeds, opens a nested ~amb~ that ~(parse-verb-phrase)~, which always fails, causes the evaluator to backtrack to.
+
+#+begin_src scheme
+  (amb ... ;; 3. Loop is complete
+       (amb 'verb-phrase
+            (amb <verb>
+                 ...) ;; 2. Continues downward
+            (parse-prepositional phrase))) ;; 1. Fails
+#+end_src
+
+The procedure in the text avoids this by computing ~(parse-verb-phrase)~ once and extending ~(parse-prepositional phrase)~ as needed.
+
+#+begin_src scheme
+(define (parse-verb-phrase)
+  (define (maybe-extend verb-phrase)
+    (amb verb-phrase
+         (maybe-extend (list 'verb-phrase
+                             verb-phrase
+                             (parse-prepositional-phrase)))))
+  (maybe-extend (parse-word verbs)))
+#+end_src
+
+Interchanging the expressions will cause an immediate recursion, while Louis's approach recurses only after all options are exhausted.

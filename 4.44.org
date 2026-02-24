@@ -1,0 +1,33 @@
+* Question
+Exercise 2.42 described the "eight-queens puzzle" of placing queens on a chessboard so that no two attack each other. Write a nondeterministic program to solve this puzzle.
+
+* Answer
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.ambeval.scm")
+
+  ;; Answer
+  (define queens
+    '(let ((board-size 8)
+           (col (lambda (piece) (car piece)))
+           (row (lambda (piece) (cdr piece)))
+           (queen (lambda (col board-size) (cons col (an-integer-between 1 board-size)))))
+       (let iter ((acc '()))
+         (require (distinct? (map row acc))) ;; Unique row
+         (require (distinct? (map (lambda (q) (- (col q) (row q))) acc))) ; Unique upward diagonal
+         (require (distinct? (map (lambda (q) (+ (col q) (row q))) acc))) ; Unique downward diagonal
+         (if (= board-size (length acc)) acc
+             (iter (cons (queen (- board-size (length acc))
+                                board-size)
+                         acc))))))
+
+  ;; Test
+  (set! mc-eval-depth 2)
+  (map print
+       (mc-eval queens))
+#+end_src
+
+#+RESULTS:
+: ((1 . 4) (2 . 2) (3 . 7) (4 . 3) (5 . 6) (6 . 8) (7 . 5) (8 . 1))
+: ((1 . 5) (2 . 2) (3 . 4) (4 . 7) (5 . 3) (6 . 8) (7 . 6) (8 . 1))
+: ...

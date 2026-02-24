@@ -1,0 +1,75 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Implement a new kind of assignment called ~permanent-set!~ that is not undone upon failure. For example, we can choose two distinct elements from a list and count the number of trials required to make a successful choice as follows:
+
+#+begin_src scheme
+  (define count 0)
+  (let ((x (an-element-of '(a b c)))
+        (y (an-element-of '(a b c))))
+    (permanent-set! count (+ count 1))
+    (require (not (eq? x y)))
+    (list x y count))
+  ;;; Starting a new problem
+  ;;; Amb-Eval value:
+  (a b 2)
+  ;;; Amb-Eval input:
+  try-again
+  ;;; Amb-Eval value:
+  (a c 3)
+#+end_src
+
+What values would have been displayed if we had used ~set!~ here rather than ~permanent-set!~ ?
+
+* Answer
+~set!~ would reset ~x~ to 0, resulting in a ~count~ of 1 for each attempt.
+
+** Implementation
+#+begin_src scheme :tangle 4.51.ambeval.eval.permanent-assignment.scm
+  (define (install-permanent-set!-package)
+    (put 'eval 'permanent-set!
+         (lambda (exp)
+           (let ((var (assignment-variable exp))
+                 (vproc (analyze (assignment-value exp))))
+             (lambda (env succeed fail)
+               (vproc env
+                      (lambda (val fail2)
+                        (set-variable-value! var val env)
+                        (succeed 'ok
+                                 fail2)) ; Do not revert
+                      fail)))))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.51.ambeval.scm
+  ;; Inherit
+  (load "4.50.ambeval.scm")
+  ;; Expression types
+  (load "4.51.ambeval.eval.permanent-assignment.scm")
+  ;; Setup
+  (install-permanent-set!-package)
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.51.ambeval.scm")
+  ;; Test
+  (map print
+       (mc-eval '(begin
+                   (define count 0)
+                   (let ((x (an-element-of '(a b c)))
+                         (y (an-element-of '(a b c))))
+                     (permanent-set! count (+ count 1))
+                     (require (not (eq? x y)))
+                     (list x y count)))))
+#+end_src
+
+#+RESULTS:
+: (a b 2)
+: (a c 3)
+: (b a 4)
+: (b c 6)
+: (c a 7)
+: ...

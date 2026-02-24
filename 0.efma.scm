@@ -2,6 +2,7 @@
   (if (> low high)
       nil
       (cons low (enumerate-interval (+ low 1) high))))
+
 (define (enumerate-tree tree)
   (cond ((null? tree) nil)
         ((not (pair? tree)) (list tree))

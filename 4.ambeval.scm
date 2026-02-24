@@ -1,0 +1,33 @@
+;; Inherit
+(load "4.22.analyzingmceval.scm")
+;;  Core
+(load "4.ambeval.eval.scm")
+;; Expression types
+(load "4.ambeval.eval.amb.scm")
+(load "4.ambeval.eval.self-evaluating.scm")
+(load "4.ambeval.eval.variable.scm")
+(load "4.ambeval.eval.quoted.scm")
+(load "4.ambeval.eval.assignment.scm")
+(load "4.ambeval.eval.definition.scm")
+(load "4.ambeval.eval.if.scm")
+(load "4.ambeval.eval.lambda.scm")
+(load "4.ambeval.eval.begin.scm")
+(load "4.ambeval.eval.load.scm")
+(load "4.ambeval.eval.application.scm")
+;; Driver
+(load "4.ambeval.driver.scm")
+(load "4.ambeval.extra.scm")
+;; Setup
+(define the-global-environment (setup-environment))
+(install-amb-package)
+(install-self-evaluating-package)
+(install-variable-package)
+(install-quotation-package)
+(install-assignment-package)
+(install-definition-package)
+(install-if-package)
+(install-lambda-package)
+(install-begin-package)
+(install-load-package)
+(install-amb-extras)
+(install-extras)

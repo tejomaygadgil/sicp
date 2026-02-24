@@ -1,0 +1,24 @@
+* Question
+The evaluators in sections 4.1 and 4.2 do not determine what order operands are evaluated in. We will see that the ~amb~ evaluator evaluates them from left to right. Explain why our parsing program wouldn't work if the operands were evaluated in some other order.
+
+* Answer
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+A non-right-to-left evaluation would disrupt the iteration of ~*unparsed*~:
+
+#+begin_src scheme
+(define (parse-sentence)
+  (list 'sentence
+        (parse-noun-phrase) ;; Nouns first,
+        (parse-verb-phrase))) ;; then verbs
+#+end_src
+
+#+begin_src scheme
+(define (parse-word word-list)
+  (require (not (null? *unparsed*)))
+  (require (memq (car *unparsed*) (cdr word-list))) ;; Fails to unwind in order
+  (let ((found-word (car *unparsed*)))
+    (set! *unparsed* (cdr *unparsed*))
+    (list (car word-list) found-word)))
+#+end_src

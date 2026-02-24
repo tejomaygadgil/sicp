@@ -1,0 +1,47 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Write a procedure ~an-integer-between~ that returns an integer between two given bounds. This can be used to implement a procedure that finds Pythagorean triples, i.e., triples of integers $(i,j,k)$ between the given bounds such that $i < j$ and $i^2 + j^2 = k^2$, as follows:
+
+#+begin_src scheme
+  (define (a-pythagorean-triple-between low high)
+    (let ((i (an-integer-between low high)))
+      (let ((j (an-integer-between i high)))
+        (let ((k (an-integer-between j high)))
+          (require (= (+ (* i i) (* j j)) (* k k)))
+          (list i j k)))))
+#+end_src
+
+* Answer
+** Implementation
+#+begin_src scheme
+  (define (an-integer-between a b)
+    (require (not (< b a)))
+    (amb a (an-integer-between (+ a 1) b)))
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.ambeval.scm") ;; Already defined
+  ;; Test
+  (mc-eval
+   '(define (a-pythagorean-triple-between low high)
+      (let ((i (an-integer-between low high)))
+        (let ((j (an-integer-between i high)))
+          (let ((k (an-integer-between j high)))
+            (require (= (+ (* i i) (* j j)) (* k k)))
+            (list i j k))))))
+  (map print
+       (mc-eval
+        '(a-pythagorean-triple-between 1 25)))
+#+end_src
+
+#+RESULTS:
+: (3 4 5)
+: (5 12 13)
+: (6 8 10)
+: (7 24 25)
+: (8 15 17)
+: ...

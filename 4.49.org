@@ -1,0 +1,93 @@
+* Question
+Alyssa P. Hacker is more interested in generating interesting sentences than in parsing them. She reasons that by simply changing the procedure ~parse-word~ so that it ignores the "input sentence" and instead always succeeds and generates an appropriate word, we can use the programs we had built for parsing to do generation instead. Implement Alyssa's idea, and show the first half-dozen or so sentences generated.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.49.ambeval.extra.grammar.generate.scm
+  (mc-eval
+   '(define (parse-word word-list)
+      (list (car word-list)
+            (an-element-of (cdr word-list)))))
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.ambeval.scm")
+  (load "4.ambeval.extra.grammar.scm")
+  (load "4.49.ambeval.extra.grammar.generate.scm")
+  ;; Test
+  (set! mc-eval-depth 6)
+  (map (lambda (x)
+         (pp x)
+         (newline))
+       (mc-eval '(parse-sentence)))
+  ;; The sentences recursing the first verb phrase.
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(sentence (simple-noun-phrase (article the) (noun student)) (verb studies))
+
+(sentence
+ (simple-noun-phrase (article the) (noun student))
+ (verb-phrase
+  (verb studies)
+  (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))))
+
+(sentence
+ (simple-noun-phrase (article the) (noun student))
+ (verb-phrase
+  (verb-phrase
+   (verb studies)
+   (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student))))
+  (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))))
+
+(sentence
+ (simple-noun-phrase (article the) (noun student))
+ (verb-phrase
+  (verb-phrase
+   (verb-phrase
+    (verb studies)
+    (prep-phrase (prep for)
+                 (simple-noun-phrase (article the) (noun student))))
+   (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student))))
+  (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))))
+
+(sentence
+ (simple-noun-phrase (article the) (noun student))
+ (verb-phrase
+  (verb-phrase
+   (verb-phrase
+    (verb-phrase
+     (verb studies)
+     (prep-phrase (prep for)
+                  (simple-noun-phrase (article the) (noun student))))
+    (prep-phrase (prep for)
+                 (simple-noun-phrase (article the) (noun student))))
+   (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student))))
+  (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))))
+
+(sentence
+ (simple-noun-phrase (article the) (noun student))
+ (verb-phrase
+  (verb-phrase
+   (verb-phrase
+    (verb-phrase
+     (verb-phrase
+      (verb studies)
+      (prep-phrase (prep for)
+                   (simple-noun-phrase (article the) (noun student))))
+     (prep-phrase (prep for)
+                  (simple-noun-phrase (article the) (noun student))))
+    (prep-phrase (prep for)
+                 (simple-noun-phrase (article the) (noun student))))
+   (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student))))
+  (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))))
+
+...
+
+#+end_example

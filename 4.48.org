@@ -1,0 +1,81 @@
+* Question
+Extend the grammar given above to handle more complex sentences. For example, you could extend noun phrases and verb phrases to include adjectives and adverbs, or you could handle compound sentences.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.48.ambeval.grammar.expanded.scm
+  (mc-eval
+   '(begin
+      (define nouns (append nouns '(apple)))
+      (define verbs (append verbs '(reads)))
+      (define conjunctions '(conjunction and or but if because although while))
+      (define (parse-verb-phrase)
+        (define (maybe-extend verb-phrase)
+          (amb verb-phrase
+               (maybe-extend (list 'verb-phrase
+                                   verb-phrase
+                                   (parse-noun-phrase)))
+               (maybe-extend (list 'verb-phrase
+                                   verb-phrase
+                                   (parse-prepositional-phrase))))) ;; Direct object
+        (maybe-extend (parse-word verbs)))
+      (define (parse-sentence)
+        (let maybe-extend ((sentence-phrase
+                            (list 'sentence
+                                  (parse-noun-phrase)
+                                  (parse-verb-phrase))))
+          (amb sentence-phrase
+               (maybe-extend (list (parse-conjunction)
+                                   sentence-phrase
+                                   (parse-sentence))))))
+      (define (parse-conjunction)
+        (parse-word conjunctions))))
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.ambeval.scm")
+  (load "4.ambeval.extra.grammar.scm")
+  (load "4.48.ambeval.grammar.expanded.scm")
+  ;; Test
+  (map (lambda (x)
+         (pp x)
+         (newline))
+       (mc-eval '(parse '(the professor
+                              eats an apple
+                              while the cat sleeps
+                              in the class
+                              and the student reads))))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+((conjunction and)
+ ((conjunction while)
+  (sentence
+   (simple-noun-phrase (article the) (noun professor))
+   (verb-phrase (verb eats) (simple-noun-phrase (article an) (noun apple))))
+  (sentence
+   (simple-noun-phrase (article the) (noun cat))
+   (verb-phrase
+    (verb sleeps)
+    (prep-phrase (prep in) (simple-noun-phrase (article the) (noun class))))))
+ (sentence (simple-noun-phrase (article the) (noun student)) (verb reads)))
+
+((conjunction while)
+ (sentence
+  (simple-noun-phrase (article the) (noun professor))
+  (verb-phrase (verb eats) (simple-noun-phrase (article an) (noun apple))))
+ ((conjunction and)
+  (sentence
+   (simple-noun-phrase (article the) (noun cat))
+   (verb-phrase
+    (verb sleeps)
+    (prep-phrase (prep in) (simple-noun-phrase (article the) (noun class)))))
+  (sentence (simple-noun-phrase (article the) (noun student)) (verb reads))))
+
+#+end_example
