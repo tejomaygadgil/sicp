@@ -1,0 +1,38 @@
+* Question
+Define rules to implement the reverse operation of exercise 2.18, which returns a list containing the same elements as a given list in reverse order. (Hint: Use ~append-to-form~.) Can your rules answer both ~(reverse (1 2 3) ?x)~ and ~(reverse ?x (1 2 3))~?
+
+* INPR Answer
+#+begin_src scheme :results output :exports both
+  (load "4.67.query.scm")
+  (define tries-depth 1)
+  (for-each mc-eval
+            (list '(assert!
+                    (rule (reverse () ()))) ;; Base case
+                  '(assert!
+                    (rule (reverse (?car-x . ?cdr-x) ?z)
+                          (and (reverse ?cdr-x ?y) ;; Check base case
+                               (append-to-form ?y (?car-x) ?z)))) ;; Inductive step
+                  '(reverse (1 2 3) ?x)
+                  '(reverse ?x (1 2 3))))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+Assertion added to data base.
+Assertion added to data base.
+;;; Query results:
+(reverse (1 2 3) (3 2 1))
+;;; Query results:
+Found loop
+
+Found loop
+
+Found loop
+
+Found loop
+
+Found loop
+#+end_example
+
+~(reverse ?x (1 2 3))~ never reaches the base case because ~?x~ has no ~cdr~.

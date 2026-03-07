@@ -1,0 +1,33 @@
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+* Question
+Alyssa P. Hacker proposes to use a simpler version of ~stream-flatmap~ in ~negate~, ~lisp-value~, and ~find-assertions~. She observes that the procedure that is mapped over the frame stream in these cases always produces either the empty stream or a singleton stream, so no interleaving is needed when combining these streams.
+
+a. Fill in the missing expressions in Alyssa's program.
+
+ #+begin_src scheme
+ (define (simple-stream-flatmap proc s)
+   (simple-flatten (stream-map proc s)))
+
+ (define (simple-flatten stream)
+   (stream-map <??>
+               (stream-filter <??> stream)))
+ #+end_src
+
+b. Does the query system's behavior change if we change it in this way?
+
+* Answer
+** a.
+#+begin_src scheme
+(define (simple-stream-flatmap proc s)
+  (simple-flatten (stream-map proc s)))
+
+(define (simple-flatten stream)
+  (stream-map stream-car
+              (stream-filter (lambda (s) (not (stream-null? s)))
+                             stream)))
+#+end_src
+
+** b.
+Alyssa is right, the query system behavior does not change with this simpler procedure.

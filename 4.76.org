@@ -1,0 +1,87 @@
+* Question
+Our implementation of ~and~ as a series combination of queries (figure 4.5) is elegant, but it is inefficient because in processing the second query of the ~and~ we must scan the data base for each frame produced by the first query. If the data base has $N$ elements, and a typical query produces a number of output frames proportional to $N$ (say $N/k$), then scanning the data base for each frame produced by the first query will require $N^2 / k$ calls to the pattern matcher. Another approach would be to process the two clauses of the ~and~ separately, then look for all pairs of output frames that are compatible. If each query produces $N/k$ output frames, then this means that we must perform $N^2/k^2$ compatibility checks -- a factor of $k$ fewer than the number of matches required in our current method.
+
+Devise an implementation of ~and~ that uses this strategy. You must implement a procedure that takes two frames as inputs, checks whether the bindings in the frames are compatible, and, if so, produces a frame that merges the two sets of bindings. This operation is similar to unification.
+
+* Answer
+** Implementation
+We attempt to merge resulting frame streams if the query does not contain ~not~ or ~lisp-value~, otherwise we proceed with the original method.
+
+#+begin_src scheme :tangle 4.76.query.scm :eval no
+  ;; Inherit
+  (load "4.query.scm")
+  ;; Modify (cf. poly's solution http://community.schemewiki.org/?sicp-ex-4.76)
+  (define (conjoin conjuncts frame-stream)
+    (if (empty-conjunction? conjuncts)
+        frame-stream
+        (if (mergeable? conjuncts)
+            (begin
+              (newline)
+              (display "(Merging frame streams)")
+              (merge-frame-streams
+               (qeval (first-conjunct conjuncts) frame-stream)
+               (conjoin (rest-conjuncts conjuncts) frame-stream)))
+            (conjoin (rest-conjuncts conjuncts)
+                     (qeval (first-conjunct conjuncts)
+                            frame-stream)))))
+  (define (mergeable? conjuncts)
+    (if (null? conjuncts) true
+        (if (member (type (first-conjunct conjuncts))
+                    '(not lisp-value)) false
+                    (mergeable? (rest-conjuncts conjuncts)))))
+  (define (merge-frame-streams frame-stream-1 frame-stream-2)
+    (stream-flatmap
+     (lambda (x)
+       (stream-flatmap
+        (lambda (y)
+          (let ((res (merge-frames x y)))
+            (if (eq? res 'failed) the-empty-stream
+                (singleton-stream res))))
+        frame-stream-2))
+     frame-stream-1))
+  (define (merge-frames frame-1 frame-2)
+    (cond ((null? frame-1) frame-2)
+          ((eq? 'failed frame-2) 'failed)
+          (else
+           (merge-frames (cdr frame-1)
+                         (extend-if-possible
+                          (binding-variable (car frame-1))
+                          (binding-value (car frame-1))
+                          frame-2)))))
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.76.query.scm")
+  ;; Test
+  (for-each mc-eval
+            (list '(and (append-to-form (1 2) (3 4) ?x)
+                        (append-to-form (1) ?y ?x))
+                  '(and (job ?supervisor ?supervisor-job)
+                        (supervisor ?name ?supervisor)
+                        (not (job ?supervisor (computer . ?job))))
+                  '(and (salary ?name ?salary)
+                        (salary (Bitdiddle Ben) ?ben-salary)
+                        (lisp-value > ?ben-salary ?salary))))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+;;; Query results:
+(Merging frame streams)
+(and (append-to-form (1 2) (3 4) (1 2 3 4)) (append-to-form (1) (2 3 4) (1 2 3 4)))
+;;; Query results:
+(and (job (scrooge eben) (accounting chief accountant)) (supervisor (cratchet robert) (scrooge eben)) (not (job (scrooge eben) (computer . ?job))))
+(and (job (warbucks oliver) (administration big wheel)) (supervisor (aull dewitt) (warbucks oliver)) (not (job (warbucks oliver) (computer . ?job))))
+(and (job (warbucks oliver) (administration big wheel)) (supervisor (scrooge eben) (warbucks oliver)) (not (job (warbucks oliver) (computer . ?job))))
+(and (job (warbucks oliver) (administration big wheel)) (supervisor (bitdiddle ben) (warbucks oliver)) (not (job (warbucks oliver) (computer . ?job))))
+;;; Query results:
+(and (salary (aull dewitt) 25000) (salary (bitdiddle ben) 60000) (lisp-value > 60000 25000))
+(and (salary (cratchet robert) 18000) (salary (bitdiddle ben) 60000) (lisp-value > 60000 18000))
+(and (salary (reasoner louis) 30000) (salary (bitdiddle ben) 60000) (lisp-value > 60000 30000))
+(and (salary (tweakit lem e) 25000) (salary (bitdiddle ben) 60000) (lisp-value > 60000 25000))
+(and (salary (fect cy d) 35000) (salary (bitdiddle ben) 60000) (lisp-value > 60000 35000))
+(and (salary (hacker alyssa p) 40000) (salary (bitdiddle ben) 60000) (lisp-value > 60000 40000))
+#+end_example

@@ -1,0 +1,26 @@
+* Question
+Define a rule that says that a person is a "big shot" in a division if the person works in the division but does not have a supervisor who works in the division.
+
+* Answer
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.query.scm")
+  ;; Test
+  (for-each mc-eval
+            (list '(assert!
+                    (rule (bigshot ?person-1 ?division-1)
+                          (and (job ?person-1 (?division-1 . ?job-1))
+                               (or (and (supervisor ?person-1 ?person-2)
+                                        (job ?person-2 (?division-2 . ?job-2))
+                                        (not (same ?division-1 ?division-2)))
+                                   (not (supervisor ?person-1 ?person-2))))))
+                  '(bigshot ?x ?y)))
+#+end_src
+
+#+RESULTS:
+:
+: Assertion added to data base.
+: ;;; Query results:
+: (bigshot (scrooge eben) accounting)
+: (bigshot (warbucks oliver) administration)
+: (bigshot (bitdiddle ben) computer)
