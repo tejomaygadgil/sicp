@@ -1,0 +1,70 @@
+* Question
+Redesign the query language as a nondeterministic program to be implemented using the evaluator of section 4.3, rather than as a stream process. In this approach, each query will produce a single answer (rather than the stream of all answers) and the user can type ~try-again~ to see more answers. You should find that much of the mechanism we built in this section is subsumed by nondeterministic search and backtracking. You will probably also find, however, that your new query language has subtle differences in behavior from the one implemented here. Can you find examples that illustrate this difference?
+
+* Answer
+** Simple queries
+#+begin_src scheme :results output :exports both
+  (load "4.78.ambeval.scm")
+  (mc-eval '(load "4.78.query.scm"))
+  (mc-eval '(initialize-data-base microshaft-data-base))
+  (map print (mc-eval '(mc-eval '(job ?x (computer . ?type)))))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results
+: (job (aull dewitt) (administration secretary))
+: (job (cratchet robert) (accounting scrivener))
+: (job (scrooge eben) (accounting chief accountant))
+: (job (warbucks oliver) (administration big wheel))
+: (job (reasoner louis) (computer programmer trainee))
+: ...
+
+** Complex queries
+#+begin_src scheme :results output :exports both
+  (load "4.78.ambeval.scm")
+  (mc-eval '(load "4.78.query.scm"))
+  (mc-eval '(initialize-data-base microshaft-data-base))
+  (map print
+       (mc-eval '(mc-eval '(and (job ?person (computer programmer))
+                                (address ?person ?where)))))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results
+: (and (job (fect cy d) (computer programmer)) (address (fect cy d) (cambridge (ames street) 3)))
+: (and (job (hacker alyssa p) (computer programmer)) (address (hacker alyssa p) (cambridge (mass ave) 78)))
+
+** Lisp values
+#+begin_src scheme :results output :exports both
+  (load "4.78.ambeval.scm")
+  (mc-eval '(load "4.78.query.scm"))
+  (mc-eval '(initialize-data-base microshaft-data-base))
+  (map print
+       (mc-eval '(mc-eval '(and (salary ?person ?amount)
+                                (lisp-value > ?amount 30000)))))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results
+: (and (salary (scrooge eben) 75000) (lisp-value > 75000 30000))
+: (and (salary (warbucks oliver) 150000) (lisp-value > 150000 30000))
+: (and (salary (fect cy d) 35000) (lisp-value > 35000 30000))
+: (and (salary (hacker alyssa p) 40000) (lisp-value > 40000 30000))
+: (and (salary (bitdiddle ben) 60000) (lisp-value > 60000 30000))
+
+** Rules
+#+begin_src scheme :results output :exports both
+  (load "4.78.ambeval.scm")
+  (mc-eval '(load "4.78.query.scm"))
+  (mc-eval '(initialize-data-base microshaft-data-base))
+  (map print (mc-eval '(mc-eval (quote lives-near ?x (ben bitdiddle)))))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results
+: (and (lives-near (aull dewitt) (bitdiddle ben)))
+: (and (lives-near (reasoner louis) (bitdiddle ben)))

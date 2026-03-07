@@ -1,5 +1,0 @@
-(load "4.logic.scm")
-(load "4.63.logic.genesis.data.scm")
-(initialize-data-base genesis-data-base)
-(newline) (display ";;; Genesis data-base")
-(query-driver-loop)

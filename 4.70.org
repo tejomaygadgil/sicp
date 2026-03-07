@@ -1,0 +1,25 @@
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+* Question
+What is the purpose of the ~let~ bindings in the procedures ~add-assertion!~ and ~add-rule!~? What would be wrong with the following implementation of ~add-assertion!~? Hint: Recall the definition of the infinite stream of ones in section 3.5.2: ~(define ones (cons-stream 1 ones))~.
+
+#+begin_src scheme
+(define (add-assertion! assertion)
+  (store-assertion-in-index assertion)
+  (set! THE-ASSERTIONS
+        (cons-stream assertion THE-ASSERTIONS))
+  'ok)
+#+end_src
+
+* Answer
+Without the ~let~ binding, ~THE-ASSERTIONS~ will recurse to ~assertion~ when it is forced.
+
+#+begin_src scheme
+(define (add-assertion! assertion)
+  (store-assertion-in-index assertion)
+  (let ((old-assertions THE-ASSERTIONS))
+    (set! THE-ASSERTIONS
+          (cons-stream assertion old-assertions))
+    'ok))
+#+end_src

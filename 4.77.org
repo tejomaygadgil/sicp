@@ -1,0 +1,149 @@
+* Question
+In section 4.4.3 we saw that ~not~ and ~lisp-value~ can cause the query language to give "wrong" answers if these filtering operations are applied to frames in which variables are unbound. Devise a way to fix this shortcoming. One idea is to perform the filtering in a "delayed" manner by appending to the frame a "promise" to filter that is fulfilled only when enough variables have been bound to make the operation possible. We could wait to perform filtering until all other operations have been performed. However, for efficiency's sake, we would like to perform filtering as soon as possible so as to cut down on the number of intermediate frames generated.
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.77.query.apply.frames.scm
+  (define the-empty-frame
+    (cons (list) (list)))
+
+  (define (empty-frame? frame)
+    (equal? frame the-empty-frame))
+
+  (define (cons-frame bindings promises)
+    (cons bindings promises))
+
+  (define (bindings frame)
+    (car frame))
+
+  (define (promises frame)
+    (cdr frame))
+
+  (define (binding-in-frame variable frame)
+    (assoc variable (car frame)))
+
+  (define (add-promise promise frame)
+    (cons-frame (bindings frame)
+                (cons promise (promises frame))))
+
+  (define (add-binding binding frame)
+    (cons-frame (cons binding (bindings frame))
+                (promises frame)))
+
+  (define (cons-promise miss-proc test-proc)
+    (lambda (frame)
+      (cond ((miss-proc frame) 'missing)
+            ((test-proc frame) frame)
+            (else 'failed))))
+
+  (define (extend variable value frame)
+    (let* ((binding (make-binding variable value))
+           (new-frame (add-binding binding frame)))
+      (let loop ((binds (bindings new-frame))
+                 (proms (promises new-frame))
+                 (failed-proms '()))
+        (if (null? proms) (cons-frame binds failed-proms)
+            (let* ((first-prom (car proms))
+                   (rest-proms (cdr proms))
+                   (yield (first-prom (cons-frame binds '()))))
+              (cond ((eq? yield 'missing)
+                     (loop binds
+                           rest-proms
+                           (cons first-prom failed-proms)))
+                    ((eq? yield 'failed) yield)
+                    (else
+                     (loop (bindings yield)
+                           rest-proms
+                           failed-proms))))))))
+
+  (define (missing-bindings? exp frame)
+    (let loop ((exp exp))
+      (if (null? exp) false
+          (let ((first-exp (car exp)))
+            (if (and (var? first-exp)
+                     (not (binding-in-frame first-exp frame))) true
+                     (loop (cdr exp)))))))
+#+end_src
+
+#+begin_src scheme :tangle 4.77.query.qeval.negate.scm
+  (define (install-negate-package)
+    (put 'not 'qeval
+         (lambda (operands frame-stream)
+           (stream-flatmap
+            (lambda (frame)
+              (let ((miss-proc
+                     (lambda (frame)
+                       (missing-bindings? (negated-query operands) frame)))
+                    (test-proc
+                     (lambda (frame)
+                       (stream-null? (qeval (negated-query operands)
+                                            (singleton-stream frame))))))
+                (cond ((miss-proc frame)
+                       (singleton-stream
+                        (add-promise (cons-promise miss-proc test-proc) frame)))
+                      ((test-proc frame) (singleton-stream frame))
+                      (else the-empty-stream))))
+            frame-stream)))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.77.query.qeval.lisp-value.scm
+  (define (install-lisp-value-package)
+    (put 'lisp-value 'qeval
+         (lambda (call frame-stream)
+           (stream-flatmap
+            (lambda (frame)
+              (let ((exp (args call)))
+                (let ((miss-proc
+                       (lambda (frame)
+                         (missing-bindings? (args call) frame)))
+                      (test-proc
+                       (lambda (frame)
+                         (execute
+                          (instantiate call
+                                       frame
+                                       (lambda (v f)
+                                         (error "Unknown pat var -- LISP-VALUE" v)))))))
+                  (cond ((miss-proc frame)
+                         (singleton-stream
+                          (add-promise (cons-promise miss-proc test-proc) frame)))
+                        ((test-proc frame) (singleton-stream frame))
+                        (else the-empty-stream)))))
+            frame-stream)))
+    'ok)
+#+end_src
+
+#+begin_src scheme :tangle 4.77.query.scm
+  ;; Inherit
+  (load "4.query.scm")
+  ;; Expression types
+  (load "4.77.query.qeval.negate.scm")
+  (load "4.77.query.qeval.lisp-value.scm")
+  ;; Application types
+  (load "4.77.query.apply.frames.scm")
+  ;; Setup
+  (install-negate-package)
+  (install-lisp-value-package)
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.77.query.scm")
+  ;; Test
+  (display "Non-programmers supervised by a rich boss")
+  (mc-eval
+   '(and (not (job ?emp (computer . ?job-rest)))
+         (lisp-value > ?sup-sal 100000)
+         (supervisor ?emp ?sup)
+         (salary ?sup ?sup-sal)))
+#+end_src
+
+#+RESULTS:
+: Non-programmers supervised by a rich boss
+: ;;; Query results:
+: (and (not (job (aull dewitt) (computer . ?job-rest))) (lisp-value > 150000 100000) (supervisor (aull dewitt) (warbucks oliver)) (salary (warbucks oliver) 150000))
+: (and (not (job (scrooge eben) (computer . ?job-rest))) (lisp-value > 150000 100000) (supervisor (scrooge eben) (warbucks oliver)) (salary (warbucks oliver) 150000))

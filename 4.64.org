@@ -1,0 +1,30 @@
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+* Question
+Louis Reasoner mistakenly deletes the `outranked-by` rule (section 4.4.1) from the data base. When he realizes this, he quickly reinstalls it. Unfortunately, he makes a slight change in the rule, and types it in as
+
+#+begin_src scheme
+(rule (outranked-by ?staff-person ?boss)
+      (or (supervisor ?staff-person ?boss)
+          (and (outranked-by ?middle-manager ?boss)
+               (supervisor ?staff-person ?middle-manager))))
+#+end_src
+
+Just after Louis types this information into the system, DeWitt Aull comes by to find out who outranks Ben Bitdiddle. He issues the query
+
+#+begin_src scheme
+(outranked-by (Bitdiddle Ben) ?who)
+#+end_src
+
+After answering, the system goes into an infinite loop. Explain why.
+
+* Answer
+Louis's procedure switches the order of expressions in the ~and~ clause, causing ~outranked-by~ to recurse before its results are filtered by ~supervisor~:
+
+#+begin_src scheme
+(rule (outranked-by ?staff-person ?boss)
+      (or (supervisor ?staff-person ?boss)
+          (and (supervisor ?staff-person ?middle-manager) ;; Filters before recursing
+               (outranked-by ?middle-manager ?boss))))
+#+end_src

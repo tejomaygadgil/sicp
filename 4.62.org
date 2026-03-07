@@ -1,0 +1,41 @@
+* Question
+Define rules to implement the ~last-pair~ operation of exercise 2.17, which returns a list containing the last element of a nonempty list. Check your rules on queries such as ~(last-pair (3) ?x)~, ~(last-pair (1 2 3) ?x)~, and ~(last-pair (2 ?x) (3))~. Do your rules work correctly on queries such as ~(last-pair ?x (3))~?
+
+* Answer
+** Implementation
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+#+begin_src scheme :tangle 4.62.query.last-pair.scm
+  (define (install-last-pair)
+    (for-each mc-eval
+              (list '(assert! (rule (last-pair (?x) (?x)))) ;; Base case
+                    '(assert! (rule (last-pair (?u . ?v) (?x))
+                                    (last-pair ?v (?x))))))) ;; Recursive step
+#+end_src
+
+**  Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.query.scm")
+  (load "4.62.query.last-pair.scm")
+  (install-last-pair)
+  ;; Test
+  (for-each mc-eval
+            (list '(last-pair (3) ?x)
+                  '(last-pair (1 2 3) ?x)
+                  '(last-pair (2 ?x) (3))))
+#+end_src
+
+#+RESULTS:
+:
+: Assertion added to data base.
+: Assertion added to data base.
+: ;;; Query results:
+: (last-pair (3) (3))
+: ;;; Query results:
+: (last-pair (1 2 3) (3))
+: ;;; Query results:
+: (last-pair (2 3) (3))
+
+~(last-pair ?x (3))~ hangs because there are infinite instances.

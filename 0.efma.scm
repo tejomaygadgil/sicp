@@ -36,6 +36,12 @@
               nil
               (map proc seq)))
 
+(define (flatten x)
+  (cond ((null? x) '())
+        ((not (pair? x)) (list x))
+        (else (append (flatten (car x))
+                      (flatten (cdr x))))))
+
 (define (remove item sequence)
   (filter (lambda (x) (not (eq? x item)))
           sequence))

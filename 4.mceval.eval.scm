@@ -1,3 +1,5 @@
+(define eval-in-underlying-scheme eval)
+
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
         ((variable? exp) (lookup-variable-value exp env))

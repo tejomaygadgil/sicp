@@ -1,0 +1,54 @@
+* Question
+Give simple queries that retrieve the following information from the data base:
+
+a. all people supervised by Ben Bitdiddle;
+b. the names and jobs of all people in the accounting division;
+c. the names and addresses of all people who live in Slumerville.
+
+* Answer
+** a.
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.query.scm")
+  ;; Test
+  (mc-eval
+   '(supervisor ?name (Bitdiddle Ben)))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results:
+: (supervisor (tweakit lem e) (bitdiddle ben))
+: (supervisor (fect cy d) (bitdiddle ben))
+: (supervisor (hacker alyssa p) (bitdiddle ben))
+
+** b.
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.query.scm")
+  ;; Test
+  (mc-eval
+   '(job ?name (accounting . ?type)))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results:
+: (job (cratchet robert) (accounting scrivener))
+: (job (scrooge eben) (accounting chief accountant))
+
+** c.
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.query.scm")
+  ;; Test
+  (mc-eval
+   '(address ?name (Slumerville . ?address)))
+#+end_src
+
+#+RESULTS:
+:
+: ;;; Query results:
+: (address (aull dewitt) (slumerville (onion square) 5))
+: (address (reasoner louis) (slumerville (pine tree road) 80))
+: (address (bitdiddle ben) (slumerville (ridge road) 10))

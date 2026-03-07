@@ -1,0 +1,61 @@
+* Question
+Devise a way to install a loop detector in the query system so as to avoid the kinds of simple loops illustrated in the text and in exercise 4.64. The general idea is that the system should maintain some sort of history of its current chain of deductions and should not begin processing a query that it is already working on. Describe what kind of information (patterns and frames) is included in this history, and how the check should be made. (After you study the details of the query-system implementation in section 4.4.4, you may want to modify the system to include your loop detector.)
+
+* Answer
+** Implementation
+#+begin_src scheme :tangle 4.67.query.scm :eval no
+  ;; Inherit
+  (load "4.query.scm")
+  ;; Modify
+  (define (apply-a-rule rule query-pattern query-frame)
+    (let ((clean-rule (rename-variables-in rule)))
+      (let ((unify-result
+             (unify-match query-pattern
+                          (conclusion clean-rule)
+                          query-frame)))
+        (if (eq? unify-result 'failed)
+            the-empty-stream
+            (let* ((lookup-value
+                    (lambda (exp) (if (var? exp)
+                                      (let ((binding (binding-in-frame exp query-frame)))
+                                        (if binding
+                                            (binding-value binding)
+                                            binding))
+                                      exp)))
+                   (elem (map lookup-value query-pattern)))
+              (if (> tries tries-depth)
+                  (begin (announce-output "Found loop")
+                         the-empty-stream)
+                  (begin
+                    (if (member elem history)
+                        (set! tries (1+ tries))
+                        (set! history (cons elem history)))
+                    (qeval (rule-body clean-rule)
+                           (singleton-stream unify-result)))))))))
+  (define (query-driver-loop)
+    (set! tries 0)
+    (prompt-for-input input-prompt)
+    (mc-eval (read))
+    (query-driver-loop))
+  ;; Setup
+  (define history '())
+  (define tries 0)
+  (define tries-depth 10)
+#+end_src
+
+** Test
+#+begin_src scheme :results output :exports both
+  ;; Load
+  (load "4.67.query.scm")
+  ;; Test
+  (for-each mc-eval
+            (list '(assert! (rule (married ?x ?y)
+                                  (married ?y ?x)))
+                  '(married Mickey ?who)))
+#+end_src
+
+#+RESULTS:
+:
+: Assertion added to data base.
+: ;;; Query results:
+: Found loop

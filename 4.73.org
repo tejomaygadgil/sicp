@@ -1,0 +1,17 @@
+* Question
+:PROPERTIES:
+:header-args:scheme: :eval no
+:END:
+Why does ~flatten-stream~ use ~delay~ explicitly? What would be wrong with defining it as follows:
+
+#+begin_src scheme
+(define (flatten-stream stream)
+  (if (stream-null? stream)
+      the-empty-stream
+      (interleave
+       (stream-car stream)
+       (flatten-stream (stream-cdr stream)))))
+#+end_src
+
+* Answer
+Without the delay, ~(flatten-stream (stream-cdr stream))~ would evaluate before being sent to ~interleave~, causing a potentially infinite loop.
